@@ -22,3 +22,17 @@ Thumbs.db
 *.pem
 *.key
 *.cert
+
+# AWS SAM generated files
+.aws-sam/
+
+# SAM local configuration (may contain environment-specific settings)
+samconfig.toml
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
