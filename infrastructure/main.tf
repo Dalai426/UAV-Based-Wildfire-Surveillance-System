@@ -43,7 +43,7 @@ module "storage" {
 
 module "permissions" {
   source = "./permissions"
-
+  // variables
   project_name  = var.project_name
   s3_bucket_arn = module.storage.bucket_arn
 
@@ -55,4 +55,12 @@ module "permissions" {
       log_group_arn = module.monitoring.log_group_dashboard_arn
     }
   }
+}
+
+module "bastion_ec2" {
+  source = "./bastion_ec2"
+  // variables
+  vpc_id         = module.network.vpc_id
+  public_subnets = module.network.public_subnet_ids
+
 }
