@@ -4,10 +4,39 @@ locals {
   s3_bucket_name = lower(
     "${var.project_name}-${var.region}-s3"
   )
+  vpc_name = lower(
+    "${var.project_name}-${var.region}-vpc"
+  )
+  db_name = lower(
+    "${var.project_name}-${var.region}-db"
+  )
+}
+
+module "network" {
+  source = "./network"
+  // variables
+  vpc_name = local.vpc_name
+}
+
+module "database" {
+  source = "./database"
+  // variables
+  db_name            = local.db_name
+  vpc_id             = module.network.vpc_id
+  db_instance_class  = "db.t3.micro"
+  private_subnets    = module.network.private_subnet_ids
+  network_cidr_block = module.network.cidr_block
+}
+
+module "monitoring" {
+  source = "./monitoring"
+  // variables
+  project_name               = var.project_name
+  budget_notification_emails = ["Gadalai426@gmail.com"]
 }
 
 module "storage" {
-  source = "./storage"
+  source = "./s3"
   // variables
   s3_bucket_name = local.s3_bucket_name
 }
@@ -15,7 +44,7 @@ module "storage" {
 module "permissions" {
   source = "./permissions"
   // variables
-  project_name = var.project_name
+  project_name  = var.project_name
+  s3_bucket_arn = module.storage.bucket_arn
+  log_group_arn = module.monitoring.log_group_arn
 }
-
-
