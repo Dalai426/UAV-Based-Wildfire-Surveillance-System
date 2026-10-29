@@ -43,8 +43,16 @@ module "storage" {
 
 module "permissions" {
   source = "./permissions"
-  // variables
+
   project_name  = var.project_name
   s3_bucket_arn = module.storage.bucket_arn
-  log_group_arn = module.monitoring.log_group_arn
+
+  permissions_for_lambda = {
+    "gsBackend" = {
+      log_group_arn = module.monitoring.log_group_gs_arn
+    }
+    "dashboardBackend" = {
+      log_group_arn = module.monitoring.log_group_dashboard_arn
+    }
+  }
 }
