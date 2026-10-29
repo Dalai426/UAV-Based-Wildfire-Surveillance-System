@@ -1,7 +1,9 @@
 # The Role for Lambda Functions.
 resource "aws_iam_role" "lambda_role" {
-  #https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role
-  name = "${var.project_name}-lambda-role"
+
+  for_each = var.permissions_for_lambda
+
+  name = "${var.project_name}-${each.key}-lambda-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -30,18 +32,20 @@ resource "aws_iam_policy" "lambda_vpc_access" {
         "ec2:AssignPrivateIpAddresses",
         "ec2:UnassignPrivateIpAddresses"
       ]
-      Resource = "*"  # Required by AWS — EC2 network interfaces have no ARN scope
+      Resource = "*" # Required by AWS — EC2 network interfaces have no ARN scope
     }]
   })
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
-  role       = aws_iam_role.lambda_role.name
+  for_each   = var.permissions_for_lambda
+  role       = aws_iam_role.lambda_role[each.key].name
   policy_arn = aws_iam_policy.lambda_vpc_access.arn
 }
 
 resource "aws_iam_policy" "lambda_logging" {
-  name        = "${var.project_name}-lambda-logging"
+  for_each    = var.permissions_for_lambda
+  name        = "${var.project_name}-${each.key}-lambda-logging"
   description = "Allow Lambda functions to write to the shared log group"
 
   policy = jsonencode({
@@ -52,14 +56,15 @@ resource "aws_iam_policy" "lambda_logging" {
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ]
-      Resource = "${var.log_group_arn}:*"
+      Resource = "${each.value.log_group_arn}:*"
     }]
   })
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_logging" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = aws_iam_policy.lambda_logging.arn
+  for_each   = var.permissions_for_lambda
+  role       = aws_iam_role.lambda_role[each.key].name
+  policy_arn = aws_iam_policy.lambda_logging[each.key].arn
 }
 
 # The Role for IoT Core

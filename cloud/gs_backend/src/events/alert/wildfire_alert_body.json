@@ -1,0 +1,5 @@
+{
+  "drone_id": "drone-002",
+  "alert": "gps_signal_lost",
+  "battery": 15
+}

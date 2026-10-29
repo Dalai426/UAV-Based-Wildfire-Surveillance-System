@@ -8,7 +8,9 @@ variable "s3_bucket_arn" {
   type        = string
 }
 
-variable "log_group_arn" {
-  description = "Log Group Arn"
-  type        = string
+variable "permissions_for_lambda" {
+  description = "Permissions for Lambda functions"
+  type = map(object({
+    log_group_arn = string
+  }))
 }

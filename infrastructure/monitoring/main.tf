@@ -22,7 +22,12 @@ resource "aws_budgets_budget" "account_monthly" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "lambda_logs" {
-  name              = "/${var.project_name}/logs"
+resource "aws_cloudwatch_log_group" "gs_lambda_logs" {
+  name              = "/${var.project_name}/gs/logs"
+  retention_in_days = 90
+}
+
+resource "aws_cloudwatch_log_group" "dashboard_lambda_logs" {
+  name              = "/${var.project_name}/dashboard/logs"
   retention_in_days = 90
 }

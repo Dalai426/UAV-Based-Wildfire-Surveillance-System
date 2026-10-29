@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Drone surveillance system Dashboard API and Lambda functions
+Globals:
+  Function:
+    Timeout: 40
+    Tracing: Active
+    LoggingConfig:
+      LogFormat: JSON
+  Api:
+    TracingEnabled: true
+Parameters:
+  DashboardBackendLambdaFunctionsRoleArn:
+    Type: String
+Resources:
+  DashboardBackendApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+  # gsBackendFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: gs_backend/
+  #     Handler: app.handler
+  #     Runtime: python3.13
+  #     Architectures:
+  #       - x86_64
+  #     Events:
+  #       SendAlertData:
+  #         Type: Api
+  #         Properties:
+  #           RestApiId:
+  #             Ref: GsBackendApi
+  #           Path: /ground-station/alert
+  #           Method: post
+Outputs:
+  DashboardBackendUrl:
+    Description: Dashboard API Gateway URL
+    Value:
+      Fn::Sub: "https://${DashboardBackendApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/"
