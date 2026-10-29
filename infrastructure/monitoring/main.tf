@@ -21,3 +21,8 @@ resource "aws_budgets_budget" "account_monthly" {
     subscriber_email_addresses = var.budget_notification_emails
   }
 }
+
+resource "aws_cloudwatch_log_group" "lambda_logs" {
+  name              = "/${var.project_name}/logs"
+  retention_in_days = 90
+}

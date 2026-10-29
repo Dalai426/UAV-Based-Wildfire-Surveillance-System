@@ -9,19 +9,19 @@ module "vpc" {
   version = "5.19.0"
 
   name = var.vpc_name
-  cidr = "10.0.0.0/16"
 
   azs = slice(
     data.aws_availability_zones.available.names,
     0,
     2
   )
-
+  // The range of IP address 
+  cidr            = "10.0.0.0/16"
   private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
 
-  create_igw         = false
-  enable_nat_gateway = false
-
+  create_igw = false
+  // door that allow services in the vpc to access public internet
+  enable_nat_gateway   = false
   enable_dns_support   = true
   enable_dns_hostnames = true
 }

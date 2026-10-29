@@ -14,8 +14,8 @@ variable "db_instance_class" {
   default     = "db.t3.micro"
 }
 
-variable "lambda_security_group_id" {
-  description = "Lambda Security Group ID"
+variable "network_cidr_block" {
+  description = "the CIDR block of the VPC"
   type        = string
 }
 

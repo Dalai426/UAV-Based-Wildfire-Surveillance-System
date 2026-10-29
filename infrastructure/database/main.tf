@@ -6,12 +6,13 @@ resource "aws_security_group" "postgres" {
   description = "Allow PostgreSQL access from the backend Lambda"
   vpc_id      = var.vpc_id
 
+  # Inbound traffic
   ingress {
-    description     = "PostgreSQL from backend Lambda"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [var.lambda_security_group_id]
+    description = "PostgreSQL from backend Lambda"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [var.network_cidr_block]
   }
 
   # Allow outbound traffic for database operations
