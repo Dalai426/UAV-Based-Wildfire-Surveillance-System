@@ -18,15 +18,25 @@ module "network" {
   vpc_name = local.vpc_name
 }
 
+module "bastion_ec2" {
+  source = "./bastion_ec2"
+  // variables
+  vpc_id         = module.network.vpc_id
+  public_subnets = module.network.public_subnet_ids
+
+}
+
 module "database" {
   source = "./database"
   // variables
-  db_name            = local.db_name
-  vpc_id             = module.network.vpc_id
-  db_instance_class  = "db.t3.micro"
-  private_subnets    = module.network.private_subnet_ids
-  network_cidr_block = module.network.cidr_block
+  db_name                   = local.db_name
+  vpc_id                    = module.network.vpc_id
+  db_instance_class         = "db.t3.micro"
+  private_subnets           = module.network.private_subnet_ids
+  network_cidr_block        = module.network.cidr_block
+  bastion_security_group_id = module.bastion_ec2.bastion_security_group_id
 }
+
 
 module "monitoring" {
   source = "./monitoring"
@@ -55,12 +65,4 @@ module "permissions" {
       log_group_arn = module.monitoring.log_group_dashboard_arn
     }
   }
-}
-
-module "bastion_ec2" {
-  source = "./bastion_ec2"
-  // variables
-  vpc_id         = module.network.vpc_id
-  public_subnets = module.network.public_subnet_ids
-
 }

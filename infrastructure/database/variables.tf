@@ -8,6 +8,11 @@ variable "vpc_id" {
   type        = string
 }
 
+variable "bastion_security_group_id" {
+  description = "Bastion Machine Security Group ID"
+  type        = string
+}
+
 variable "db_instance_class" {
   description = "RDS Instance Class for Database"
   type        = string

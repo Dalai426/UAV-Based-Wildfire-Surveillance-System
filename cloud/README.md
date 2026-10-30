@@ -14,6 +14,13 @@ cd gs_backend
 sam build
 sam local start-api --port 3000
 ```
+### Commands for Hot Reload
+```bash
+sam build
+pip install watchdog
+watchmedo shell-command --patterns="*.py" --recursive --command='rsync -r --include="*/" --include="*.py" --exclude="*" src/ .aws-sam/build/gsBackendFunction/' src
+FLASK_SKIP_DOTENV=1 sam local start-api --port 3000
+```
 ### Commands for Deploying Resources
 ```bash
 sam build
