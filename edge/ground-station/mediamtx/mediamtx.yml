@@ -1,0 +1,51 @@
+# Log enough information for development/debugging.
+logLevel: info
+
+# Enable RTSP.
+rtsp: true
+
+# Use TCP for the RTSP media transport.
+# This is generally easier and more reliable than UDP for the MVP.
+rtspTransports: [tcp]
+
+# Enable MediaMTX's playback API.
+# The Core uses this API to retrieve recorded intervals for evidence.
+playback: true
+playbackAddress: :9996
+
+pathDefaults:
+
+  # Record every incoming stream automatically.
+  record: true
+
+  # Store recordings by stream key.
+  #
+  # %path becomes the stream key, for example:
+  # /recordings/d7f3a91c/...
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+
+  # Fragmented MP4 recording format.
+  recordFormat: fmp4
+
+  # Internal recording parts are roughly one second long.
+  #
+  # Smaller parts reduce how much recent footage could be lost
+  # if MediaMTX or the machine crashes unexpectedly.
+  recordPartDuration: 1s
+
+  # Safety limit for a recording part.
+  recordMaxPartSize: 50M
+
+  # Finalize recording segments approximately every five seconds.
+  recordSegmentDuration: 5s
+
+  # Keep rolling recordings for ten minutes.
+  #
+  # MediaMTX automatically deletes recordings older than this.
+  # Evidence files are stored separately and are not affected.
+  recordDeleteAfter: 10m
+
+# Accept arbitrary stream paths.
+# Later authentication can restrict who may publish/read each path.
+paths:
+  all_others:

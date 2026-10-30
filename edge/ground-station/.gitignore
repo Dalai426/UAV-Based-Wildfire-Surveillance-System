@@ -1,0 +1,8 @@
+# Local environment / secrets
+.env
+
+# Runtime data
+data/
+
+# Test videos / generated media
+videos/*.mp4

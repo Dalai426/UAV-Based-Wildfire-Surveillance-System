@@ -1,0 +1,9 @@
+# HTTP API framework.
+fastapi
+
+# ASGI server used to run FastAPI.
+uvicorn[standard]
+
+# Async HTTP client.
+# Used by Core to call the MediaMTX playback API.
+httpx

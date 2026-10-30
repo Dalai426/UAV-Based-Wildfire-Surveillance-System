@@ -1,0 +1,78 @@
+services:
+
+  # MediaMTX handles:
+  # - incoming live video streams
+  # - serving live video to the AI service
+  # - rolling video recordings
+  # - playback of recorded intervals
+  media-server:
+    image: bluenviron/mediamtx:1
+    restart: unless-stopped
+
+    volumes:
+      # MediaMTX configuration.
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+
+      # Rolling recordings are persisted on the host.
+      - ./data/recordings:/recordings
+
+    ports:
+      # RTSP input/output.
+      # Used by the simulated drone publisher during development.
+      - "8554:8554"
+
+      # MediaMTX playback API.
+      #
+      # Bound only to localhost on the host machine.
+      # Other containers can still access it internally through:
+      # http://media-server:9996
+      - "127.0.0.1:9996:9996"
+
+
+  # Main application service running on the ground station.
+  #
+  # Responsible for:
+  # - drone/session management
+  # - telemetry
+  # - detection decisions
+  # - event creation
+  # - evidence generation
+  # - persistent event state
+  ground-station-core:
+    build:
+      context: ./ground-station-core
+
+    restart: unless-stopped
+
+    # Start MediaMTX before starting the Core.
+    #
+    # Note: this only controls startup order.
+    # The Core must still tolerate MediaMTX temporarily being unavailable.
+    depends_on:
+      - media-server
+
+    environment:
+      # Temporary MVP configuration.
+      # Later these should come from drone/session registration instead.
+      DRONE_ID: ${DRONE_ID}
+      STREAM_KEY: ${STREAM_KEY}
+
+      # Internal Docker hostname for MediaMTX.
+      MEDIAMTX_PLAYBACK_URL: http://media-server:9996
+
+      # Paths inside this container.
+      EVIDENCE_DIR: /data/evidence
+      DATABASE_PATH: /data/database/ground-station.db
+
+    volumes:
+      # Final evidence clips and metadata.
+      - ./data/evidence:/data/evidence
+
+      # SQLite database.
+      - ./data/database:/data/database
+
+    ports:
+      # Ground Station Core API.
+      - "8080:8080"
+
+      
