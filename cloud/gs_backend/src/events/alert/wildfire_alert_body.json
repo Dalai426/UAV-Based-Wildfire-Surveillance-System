@@ -1,5 +1,20 @@
 {
-  "drone_id": "drone-002",
-  "alert": "gps_signal_lost",
-  "battery": 15
+  "event_id": "EVT-001",
+  "ground_station_id": "GS-001",
+  "ground_station": {
+  },
+  "confidence_percent": 98.0,
+  "detection_time": "2026-10-29T10:30:00Z",
+  "footage_duration": 12.5,
+  "status": "active",
+  "coordinates": {
+    "longitude": 12.5700,
+    "latitude": 55.6780
+  },
+  "drone_id": "DRONE-001",
+  "drone": {
+    "speed": 15.5,
+    "altitude": 120.0,
+    "battery_status": "normal"
+  }
 }
