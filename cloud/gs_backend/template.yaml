@@ -12,15 +12,31 @@ Globals:
 Parameters:
   CloudBackendLambdaFunctionsRoleArn:
     Type: String
+  DBHost:
+    Type: String
+  DBUser:
+    Type: String
+  DBPassword:
+    Type: String
+    NoEcho: True
 Resources:
   GsBackendApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
-
   gsBackendFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Environment:
+        Variables:
+          DB_HOST:
+            Ref: DBHost
+          DB_NAME: wf_detection
+          DB_USER:
+            Ref: DBUser
+          DB_PASSWORD:
+            Ref: DBPassword
+          DB_PORT: "5432"
       CodeUri: src/
       Handler: app.handler
       Role:
@@ -36,6 +52,8 @@ Resources:
               Ref: GsBackendApi
             Path: /ground-station/alert
             Method: post
+    Metadata:
+      BuildMethod: python3.13
 Outputs:
   CloudBackendUrl:
     Description: API Gateway URL

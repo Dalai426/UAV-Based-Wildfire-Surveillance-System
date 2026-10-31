@@ -1,11 +1,14 @@
 import json
 from configs.logger_config import logger
+from configs.async_loop_config import loop
 from handlers.alert_handler import handle_alert
 from pydantic import ValidationError
+from configs.db_config import get_db_pool
 
 routes = {
     ("POST", "/ground-station/alert"): handle_alert,
 }
+loop.run_until_complete(get_db_pool())
 
 def response(status_code, data):
     return {
@@ -24,7 +27,9 @@ def handler(event, context):
     if route_handler is None:
         return response(404, {"error": "Route not found"})
     try:
-        resp = route_handler(event)
+        resp = loop.run_until_complete(
+            route_handler(event)
+        )
         return response(200, resp)
     except json.JSONDecodeError:
         logger.warning("Invalid JSON request body")
