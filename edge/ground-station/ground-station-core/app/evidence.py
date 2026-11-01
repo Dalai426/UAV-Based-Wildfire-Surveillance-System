@@ -1,10 +1,11 @@
 import hashlib
-import json
 import os
-from datetime import datetime, timezone
+from datetime import timezone
 from pathlib import Path
 
 import httpx
+
+from app.schemas import CreateEvidence, Evidence
 
 
 # Internal MediaMTX playback API URL.
@@ -13,21 +14,14 @@ MEDIAMTX_URL = os.environ["MEDIAMTX_PLAYBACK_URL"]
 # Permanent evidence directory.
 EVIDENCE_DIR = Path(os.environ["EVIDENCE_DIR"])
 
-# Temporary files are kept separately so incomplete evidence
-# never appears as a finished event.
+# Keep partial downloads separate from completed evidence files.
 TEMP_DIR = EVIDENCE_DIR / ".tmp"
 
 EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
-async def create_evidence(
-    event_id: str,
-    drone_id: str,
-    stream_key: str,
-    start: datetime,
-    end: datetime,
-):
+async def create_evidence(request: CreateEvidence) -> Evidence:
     """
     Retrieve a recorded interval from MediaMTX and store it
     as permanent evidence.
@@ -40,49 +34,48 @@ async def create_evidence(
               ↓
         calculate SHA-256
               ↓
-        move to final event directory
+        move to final evidence directory
               ↓
         create metadata.json
     """
 
-    # Normalize all stored evidence times to UTC.
-    start_utc = start.astimezone(timezone.utc)
-    end_utc = end.astimezone(timezone.utc)
+    # Store the requested interval in UTC; these are not measured video times.
+    start_utc = request.requested_start.astimezone(timezone.utc)
+    end_utc = request.requested_end.astimezone(timezone.utc)
 
     duration = (end_utc - start_utc).total_seconds()
 
-    # Organize evidence by the date when the event started.
+    # Group clips by the requested start date in UTC.
     event_date = start_utc.date().isoformat()
 
     # Example:
     #
     # 2026-10-30/
-    # └── <event-id>/
-    relative_directory = Path(event_date) / event_id
-    event_directory = EVIDENCE_DIR / relative_directory
+    # └── <evidence-id>/
+    # Each evidence clip gets its own directory.
+    relative_directory = Path(event_date) / request.evidence_id
+    evidence_directory = EVIDENCE_DIR / relative_directory
 
-    # Use the stream key as the video filename.
-    video_name = f"{stream_key}.mp4"
+    # The evidence directory supplies the unique identity.
+    video_name = "video.mp4"
 
-    video_path = event_directory / video_name
-    metadata_path = event_directory / "metadata.json"
+    video_path = evidence_directory / video_name
+    metadata_path = evidence_directory / "metadata.json"
 
-    # Make retries idempotent.
-    #
-    # If this event's evidence already exists, don't download
-    # or create it again.
+    # Reuse completed evidence on retries. This validates the metadata
+    # structure but does not recheck the video's hash or prevent concurrent retries.
     if video_path.exists() and metadata_path.exists():
-        return json.loads(metadata_path.read_text())
+        return Evidence.model_validate_json(metadata_path.read_text())
 
     # Download into .tmp first.
     #
     # This prevents partially downloaded videos from appearing
     # inside the final evidence directory.
-    temp_path = TEMP_DIR / f"{event_id}-{stream_key}.mp4"
+    temp_path = TEMP_DIR / f"{request.evidence_id}.mp4"
 
     # Parameters expected by MediaMTX's playback API.
     params = {
-        "path": stream_key,
+        "path": request.stream_key,
         "start": start_utc.isoformat(),
         "duration": duration,
         "format": "mp4",
@@ -93,7 +86,7 @@ async def create_evidence(
     hasher = hashlib.sha256()
 
     try:
-        async with httpx.AsyncClient(timeout=None) as client:
+        async with httpx.AsyncClient(timeout=10) as client:
 
             # Stream the response rather than loading the entire
             # evidence file into RAM.
@@ -124,7 +117,7 @@ async def create_evidence(
 
         # Only create the final directory after MediaMTX
         # successfully returned the complete video.
-        event_directory.mkdir(
+        evidence_directory.mkdir(
             parents=True,
             exist_ok=True,
         )
@@ -136,38 +129,30 @@ async def create_evidence(
         )
 
         # Metadata stored alongside the video.
-        metadata = {
-            "event_id": event_id,
-            "drone_id": drone_id,
-            "stream_key": stream_key,
+        evidence = Evidence(
+            evidence_id=request.evidence_id,
+            event_id=request.event_id,
+            drone_id=request.drone_id,
+            stream_key=request.stream_key,
 
-            "start": start_utc.isoformat(),
-            "end": end_utc.isoformat(),
-
-            "video_file": video_name,
+            requested_start=start_utc,
+            requested_end=end_utc,
 
             # Store a relative path instead of a container-specific
             # absolute path such as /data/evidence/...
-            "relative_path": str(
-                relative_directory / video_name
-            ),
+            relative_path=str(relative_directory / video_name),
 
-            "size_bytes": video_path.stat().st_size,
+            size_bytes=video_path.stat().st_size,
 
             # Integrity fingerprint of the actual evidence bytes.
-            "sha256": hasher.hexdigest(),
-
-            "status": "ready",
-        }
+            sha256=hasher.hexdigest(),
+        )
 
         # Write metadata through a temporary file as well.
-        temp_metadata = event_directory / ".metadata.tmp"
+        temp_metadata = evidence_directory / ".metadata.tmp"
 
         temp_metadata.write_text(
-            json.dumps(
-                metadata,
-                indent=2,
-            )
+            evidence.model_dump_json(indent=2)
         )
 
         # Expose metadata.json only when completely written.
@@ -176,7 +161,7 @@ async def create_evidence(
             metadata_path,
         )
 
-        return metadata
+        return evidence
 
     except Exception:
 
@@ -184,6 +169,6 @@ async def create_evidence(
         if temp_path.exists():
             temp_path.unlink()
 
-        # Let the Core decide how the event should be marked/retried.
+        # Let the API workflow update the evidence record and report the failure.
         raise
 

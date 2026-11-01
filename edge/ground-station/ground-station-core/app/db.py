@@ -2,6 +2,8 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
+from app.schemas import CreateEvidence, Evidence
+
 
 # Location of the SQLite database inside the container.
 DATABASE_PATH = os.environ["DATABASE_PATH"]
@@ -20,6 +22,10 @@ def connect():
     # Return rows that behave like dictionaries instead of tuples.
     connection.row_factory = sqlite3.Row
 
+
+    # Reject evidence records referencing a nonexistent event.
+    connection.execute("PRAGMA foreign_keys = ON")
+
     return connection
 
 
@@ -37,27 +43,8 @@ def init_db():
                 -- Permanent identifier for this wildfire event.
                 event_id TEXT PRIMARY KEY,
 
-                -- Drone that generated the event.
+                -- Drone that supplied the initial detection.
                 drone_id TEXT NOT NULL,
-
-                -- MediaMTX stream used when the event occurred.
-                stream_key TEXT NOT NULL,
-
-                -- Evidence time interval.
-                start_time TEXT NOT NULL,
-                end_time TEXT NOT NULL,
-
-                -- PENDING / READY / FAILED.
-                evidence_status TEXT NOT NULL,
-
-                -- Relative path to the final evidence video.
-                evidence_path TEXT,
-
-                -- Integrity hash of the final evidence video.
-                evidence_sha256 TEXT,
-
-                -- File size, useful later for uploads/storage.
-                evidence_size_bytes INTEGER,
 
                 -- When the event was first created locally.
                 created_at TEXT NOT NULL
@@ -65,13 +52,36 @@ def init_db():
             """
         )
 
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evidence (
+                evidence_id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL REFERENCES events(event_id),
+                drone_id TEXT NOT NULL,
+                stream_key TEXT NOT NULL,
+                requested_start TEXT NOT NULL,
+                requested_end TEXT NOT NULL,
 
-def create_event(
+                -- PENDING / READY / FAILED.
+                creation_status TEXT NOT NULL DEFAULT 'PENDING',
+                
+                relative_path TEXT,
+
+                -- Integrity hash of the final evidence video.
+                sha256 TEXT,
+
+                -- File size, useful later for uploads/storage.
+                size_bytes INTEGER,
+                
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+
+def insert_event(
     event_id: str,
-    drone_id: str,
-    stream_key: str,
-    start_time: str,
-    end_time: str,
+    drone_id: str
 ):
     """
     Persist an event before attempting evidence generation.
@@ -86,21 +96,13 @@ def create_event(
             INSERT INTO events (
                 event_id,
                 drone_id,
-                stream_key,
-                start_time,
-                end_time,
-                evidence_status,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?)
             """,
             (
                 event_id,
                 drone_id,
-                stream_key,
-                start_time,
-                end_time,
-                "PENDING",
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
@@ -124,12 +126,49 @@ def get_event(event_id: str):
         return dict(row) if row else None
 
 
-def mark_evidence_ready(
-    event_id: str,
-    relative_path: str,
-    sha256: str,
-    size_bytes: int,
-):
+def insert_evidence(request: CreateEvidence):
+    with connect() as db:
+        db.execute(
+            """
+            INSERT INTO evidence (
+                evidence_id,
+                event_id,
+                drone_id,
+                stream_key,
+                requested_start,
+                requested_end,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                request.evidence_id,
+                request.event_id,
+                request.drone_id,
+                request.stream_key,
+                request.requested_start.isoformat(),
+                request.requested_end.isoformat(),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+
+
+def get_evidence(evidence_id: str):
+    """Load an evidence record for inspection or retry."""
+    with connect() as db:
+        row = db.execute(
+            """
+            SELECT *
+            FROM evidence
+            WHERE evidence_id = ?
+            """,
+            (evidence_id,),
+        ).fetchone()
+
+        return dict(row) if row else None
+
+
+def mark_evidence_ready(evidence: Evidence):
     """
     Mark evidence as successfully created and store its metadata.
     """
@@ -137,38 +176,49 @@ def mark_evidence_ready(
     with connect() as db:
         db.execute(
             """
-            UPDATE events
-            SET
-                evidence_status = 'READY',
-                evidence_path = ?,
-                evidence_sha256 = ?,
-                evidence_size_bytes = ?
-            WHERE event_id = ?
+            UPDATE evidence
+            SET creation_status = 'READY',
+                relative_path = ?,
+                sha256 = ?,
+                size_bytes = ?
+            WHERE evidence_id = ?
             """,
             (
-                relative_path,
-                sha256,
-                size_bytes,
-                event_id,
+                evidence.relative_path,
+                evidence.sha256,
+                evidence.size_bytes,
+                evidence.evidence_id,
             ),
         )
 
 
-def mark_evidence_failed(event_id: str):
+def mark_evidence_failed(evidence_id: str):
     """
     Mark evidence generation as failed.
-
-    The event itself remains in the database so evidence can
-    later be retried using the same event_id.
     """
-
     with connect() as db:
         db.execute(
             """
-            UPDATE events
-            SET evidence_status = 'FAILED'
-            WHERE event_id = ?
+            UPDATE evidence
+            SET creation_status = 'FAILED'
+            WHERE evidence_id = ?
             """,
-            (event_id,),
+            (evidence_id,),
         )
 
+
+def list_event_evidence(event_id: str):
+    """Return all evidence records belonging to an event."""
+    with connect() as db:
+        rows = db.execute(
+            """
+            SELECT *
+            FROM evidence
+            WHERE event_id = ?
+            ORDER BY created_at, evidence_id
+            """,
+            (event_id,),
+        ).fetchall()
+
+        return [dict(row) for row in rows]
+    
