@@ -8,7 +8,7 @@ from configs.db_config import get_db_pool
 routes = {
     ("POST", "/ground-station/alert"): handle_alert,
 }
-loop.run_until_complete(get_db_pool())
+pool=loop.run_until_complete(get_db_pool())
 
 def response(status_code, data):
     return {

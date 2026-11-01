@@ -19,11 +19,19 @@ Parameters:
   DBPassword:
     Type: String
     NoEcho: True
+  LambdaLogGroupName:
+    Type: String
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+  LambdaSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
 Resources:
   GsBackendApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
+      Auth:
+        DefaultAuthorizer: AWS_IAM
   gsBackendFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -44,6 +52,14 @@ Resources:
       Runtime: python3.13
       Architectures:
         - x86_64
+      VpcConfig:
+        SecurityGroupIds:
+          - Ref: LambdaSecurityGroupId
+        SubnetIds:
+          Ref: PrivateSubnetIds
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: /drone-surveillance-system/gs/logs
       Events:
         SendAlertData:
           Type: Api
@@ -52,6 +68,8 @@ Resources:
               Ref: GsBackendApi
             Path: /ground-station/alert
             Method: post
+            Auth:
+              Authorizer: AWS_IAM
     Metadata:
       BuildMethod: python3.13
 Outputs:
