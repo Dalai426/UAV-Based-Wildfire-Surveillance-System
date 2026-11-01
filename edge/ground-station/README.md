@@ -11,10 +11,11 @@ Currently implemented:
 - Media Server using MediaMTX
 - rolling local video recording
 - Ground Station Core API
-- local SQLite event storage
+- separate SQLite event and evidence storage
+- typed request and evidence models using Pydantic
 - evidence extraction from recorded video
 - evidence metadata and SHA-256 hashing
-- retry-safe evidence creation
+- reuse of completed evidence on retries
 
 AI inference, drone telemetry/authentication, and cloud synchronization are planned but not implemented yet.
 
@@ -41,15 +42,17 @@ The Ground Station Core contains the main application logic.
 It currently:
 
 - creates wildfire events
-- generates and persists an `event_id`
+- generates and persists an `event_id` and a separate `evidence_id`
 - stores event state in SQLite
 - requests recorded video intervals from the Media Server
 - creates permanent evidence files
 - creates evidence metadata
 - calculates a SHA-256 integrity hash
-- supports evidence retries using the same event ID
+- supports evidence retries using the same evidence ID
 
 The current `/events` endpoint is used manually for testing. Later, events will be triggered by the detection pipeline.
+
+Each request currently creates one event and one evidence record. The database relationship supports multiple evidence records per event, but additional-clip creation and event association logic are not implemented.
 
 ## Local Storage
 
@@ -79,27 +82,28 @@ Rolling recordings are temporary and are automatically removed according to the 
 ```text
 data/evidence/
 └── YYYY-MM-DD/
-    └── <event_id>/
-        ├── <stream_key>.mp4
+    └── <evidence_id>/
+        ├── video.mp4
         └── metadata.json
 ```
 
 Evidence is stored separately from the rolling recordings and is not affected by MediaMTX's rolling-recording cleanup.
 
+The date is the requested interval's start date in UTC. The evidence ID identifies the clip; its event and source stream are recorded in SQLite and metadata.
+
 `metadata.json` contains information such as:
 
 ```json
 {
+  "evidence_id": "...",
   "event_id": "...",
   "drone_id": "...",
   "stream_key": "...",
-  "start": "...",
-  "end": "...",
-  "video_file": "...",
-  "relative_path": "...",
+  "requested_start": "2026-11-01T10:00:00Z",
+  "requested_end": "2026-11-01T10:00:10Z",
+  "relative_path": "2026-11-01/<evidence_id>/video.mp4",
   "size_bytes": 123456,
-  "sha256": "...",
-  "status": "ready"
+  "sha256": "<64-character lowercase hexadecimal hash>"
 }
 ```
 
@@ -108,12 +112,17 @@ Evidence is stored separately from the rolling recordings and is not affected by
 The local SQLite database is stored under:
 
 ```text
-data/database/
+data/database/ground-station.db
 ```
 
-An event is saved before evidence creation starts.
+The database has two tables:
 
-This means that if evidence creation fails, the event still exists and evidence can be retried using the same `event_id`.
+- `events`: event ID, initial detecting drone ID, and local creation time (`created_at`). This timestamp is when the event is saved, not a separate detection timestamp.
+- `evidence`: evidence ID, parent event ID, source drone and stream, requested interval, creation status (`PENDING`, `READY`, or `FAILED`), file path, hash, size, and creation time.
+
+The event is committed independently before the pending evidence record is inserted. An evidence failure does not roll back the event. Retries load the original evidence inputs and reuse its `evidence_id`.
+
+`init_db()` creates missing tables at startup; it does not migrate existing tables. Databases from the previous combined event/evidence schema need migration. For disposable development data, stop the Core, remove the test database, and restart it to create the current schema. Existing video files remain on disk but are not automatically imported into a new database.
 
 ## How Evidence Creation Works
 
@@ -122,9 +131,11 @@ When an event is created:
 ```text
 Create event
     ↓
-Generate event_id
+Generate event_id and evidence_id
     ↓
 Save event to SQLite
+    ↓
+Save separate PENDING evidence record
     ↓
 Request recorded interval from Media Server
     ↓
@@ -136,10 +147,12 @@ Move to final evidence directory
     ↓
 Write metadata.json
     ↓
-Mark event READY
+Mark evidence READY
 ```
 
-If evidence creation fails, the event remains in the database and can be retried.
+Handled HTTP, filesystem, and metadata-validation failures mark evidence `FAILED` and return both IDs. The event remains saved. Database failures and process interruptions may prevent status updates.
+
+Completed evidence is reused when both the video and valid metadata exist. Retries do not recalculate the stored hash. Simultaneous creation/retry requests for the same evidence are not yet protected against conflicts.
 
 ## Project Structure
 
@@ -156,7 +169,8 @@ ground-station/
 │       ├── __init__.py
 │       ├── main.py
 │       ├── db.py
-│       └── evidence.py
+│       ├── evidence.py
+│       └── schemas.py
 ├── data/
 │   ├── recordings/
 │   ├── evidence/
@@ -190,6 +204,8 @@ View logs:
 ```bash
 docker compose logs -f
 ```
+
+Application code is copied into the image. After source changes, rebuild the Core with `docker compose up -d --build ground-station-core`.
 
 ## Testing
 
@@ -256,7 +272,29 @@ curl -X POST http://localhost:8080/events \
   }'
 ```
 
-A successful request returns an `event_id` and evidence metadata.
+Both timestamps must include a timezone, `end` must be after `start`, and the requested interval must not exceed `MAX_EVENT_EVIDENCE_SECONDS` (currently 20 seconds, defined in `app/main.py`). Output duration is not measured.
+
+A successful request returns:
+
+```json
+{
+  "event_id": "...",
+  "status": "READY",
+  "evidence": {
+    "evidence_id": "...",
+    "event_id": "...",
+    "drone_id": "...",
+    "stream_key": "d7f3a91c",
+    "requested_start": "2026-11-01T10:00:00Z",
+    "requested_end": "2026-11-01T10:00:10Z",
+    "relative_path": "2026-11-01/<evidence_id>/video.mp4",
+    "size_bytes": 123456,
+    "sha256": "<64-character lowercase hexadecimal hash>"
+  }
+}
+```
+
+The request waits for evidence creation. It can return an error even though the event was successfully saved; `READY` in the response refers to evidence completion, not a fire lifecycle state.
 
 ### 6. Check the generated evidence
 
@@ -267,8 +305,8 @@ find data/evidence -type f
 You should see:
 
 ```text
-data/evidence/<date>/<event_id>/
-├── <stream_key>.mp4
+data/evidence/<date>/<evidence_id>/
+├── video.mp4
 └── metadata.json
 ```
 
@@ -278,14 +316,44 @@ data/evidence/<date>/<event_id>/
 curl http://localhost:8080/events/<event_id>
 ```
 
+The response includes event fields and an `evidence` list containing database records and their creation states. Unknown event IDs return `404`.
+
+To list all records locally (requires the SQLite CLI):
+
+```bash
+sqlite3 -header -column data/database/ground-station.db "SELECT * FROM events;"
+sqlite3 -header -column data/database/ground-station.db "SELECT * FROM evidence;"
+```
+
 ### 8. Retry evidence creation
 
 ```bash
 curl -X POST \
-  http://localhost:8080/events/<event_id>/evidence
+  http://localhost:8080/evidence/<evidence_id>/retry
 ```
 
-The existing `event_id` is reused rather than creating a new event.
+Use `evidence.evidence_id` from a successful creation response or `detail.evidence_id` from a handled failure response. Retrying preserves both IDs and does not insert another evidence record. Unknown evidence IDs return `404`.
+
+### 9. Verify failure handling
+
+Stop the Media Server, then submit an event request using a known recorded interval:
+
+```bash
+docker compose stop media-server
+```
+
+Expect `502` with `event_id` and `evidence_id` inside `detail`. Read the event to confirm it remains saved and the evidence is `FAILED`.
+
+Restart MediaMTX and retry the failed evidence:
+
+```bash
+docker compose start media-server
+curl -X POST http://localhost:8080/evidence/<evidence_id>/retry
+```
+
+The requested footage must still exist within recording retention. Restart the FFmpeg publisher if it exited when MediaMTX stopped; new recording resumes once publishing resumes.
+
+Also check invalid requests: missing timezone, reversed/equal timestamps, and intervals above the limit should return `400`; missing fields or unparseable timestamps should return `422`.
 
 ## Development Configuration
 
