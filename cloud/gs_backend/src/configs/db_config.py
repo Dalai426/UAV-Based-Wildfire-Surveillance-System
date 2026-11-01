@@ -24,5 +24,7 @@ async def get_db_pool():
         except Exception as exc:
             logger.error("Database connection failed: %s", exc)
             raise
+    else:
+        logger.info("Reusing Connection")
 
     return db_pool

@@ -15,4 +15,4 @@ event = {
     "isBase64Encoded": False
 }
 
-print(event)
+print(json.dumps(event))
