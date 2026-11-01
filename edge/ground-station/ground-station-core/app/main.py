@@ -1,20 +1,25 @@
 import os
 import uuid
-from datetime import datetime
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+
+from pydantic import ValidationError
+
 
 from app.db import (
-    create_event as insert_event,
+    insert_event,
+    insert_evidence,
     get_event,
+    get_evidence,
+    list_event_evidence,
     init_db,
     mark_evidence_failed,
     mark_evidence_ready,
 )
 
 from app.evidence import create_evidence
+from app.schemas import CreateEventRequest, CreateEvidence, Evidence
 
 
 # Main Ground Station Core HTTP API.
@@ -30,17 +35,8 @@ app = FastAPI(
 DRONE_ID = os.environ["DRONE_ID"]
 STREAM_KEY = os.environ["STREAM_KEY"]
 
-
-class CreateEventRequest(BaseModel):
-    """
-    Manual event request used during development.
-
-    Later the detection logic will create these automatically
-    after the AI prediction has been confirmed.
-    """
-
-    start: datetime
-    end: datetime
+# Maximum requested interval for event evidence, in seconds.
+MAX_EVENT_EVIDENCE_SECONDS = 20
 
 
 @app.on_event("startup")
@@ -52,54 +48,43 @@ def startup():
     init_db()
 
 
-async def build_evidence(event: dict):
-    """
-    Create evidence for an event that already exists in SQLite.
 
-    This function is shared by:
-    - initial event creation
-    - evidence retries
-    """
-
-    start = datetime.fromisoformat(
-        event["start_time"]
-    )
-
-    end = datetime.fromisoformat(
-        event["end_time"]
-    )
-
+async def save_evidence(request: CreateEvidence) -> Evidence:
+    """Create evidence and report failures with IDs for retry."""
     try:
-        evidence = await create_evidence(
-            event_id=event["event_id"],
-            drone_id=event["drone_id"],
-            stream_key=event["stream_key"],
-            start=start,
-            end=end,
-        )
+        # Download the requested footage and save the video
+        # and metadata. Returns a completed Evidence model.
+        evidence = await create_evidence(request)
 
-        # Evidence has been successfully created.
-        # Persist its location and integrity information.
-        mark_evidence_ready(
-            event_id=event["event_id"],
-            relative_path=evidence["relative_path"],
-            sha256=evidence["sha256"],
-            size_bytes=evidence["size_bytes"],
-        )
-
+        # Store the file details and mark this evidence READY.
+        mark_evidence_ready(evidence)
         return evidence
 
     except httpx.HTTPError as exc:
-
-        # Keep the event but remember that evidence generation failed.
-        mark_evidence_failed(
-            event["event_id"]
-        )
+        # MediaMTX was unavailable or rejected the request.
+        mark_evidence_failed(request.evidence_id)
 
         raise HTTPException(
             status_code=502,
-            detail=f"Evidence creation failed: {exc}",
-        )
+            detail={
+                "message": "MediaMTX evidence retrieval failed",
+                "event_id": request.event_id,
+                "evidence_id": request.evidence_id,
+            },
+        ) from exc
+
+    except (OSError, ValidationError) as exc:
+        # Saving files or validating evidence metadata failed.
+        mark_evidence_failed(request.evidence_id)
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Evidence storage or validation failed",
+                "event_id": request.event_id,
+                "evidence_id": request.evidence_id,
+            },
+        ) from exc
 
 
 @app.post("/events")
@@ -138,16 +123,16 @@ async def create_event(
         request.end - request.start
     ).total_seconds()
 
-    # Current system requirement:
-    # final evidence clips are at most 20 seconds.
-    if duration > 20:
+    # Limit the requested interval; output duration is not measured here.
+    if duration > MAX_EVENT_EVIDENCE_SECONDS:
         raise HTTPException(
             status_code=400,
-            detail="evidence cannot exceed 20 seconds",
+            detail=f"evidence cannot exceed {MAX_EVENT_EVIDENCE_SECONDS} seconds",
         )
 
     # Generate the permanent event identity once.
     event_id = str(uuid.uuid4())
+    evidence_id = str(uuid.uuid4())
 
     # IMPORTANT:
     #
@@ -158,15 +143,23 @@ async def create_event(
     insert_event(
         event_id=event_id,
         drone_id=DRONE_ID,
-        stream_key=STREAM_KEY,
-        start_time=request.start.isoformat(),
-        end_time=request.end.isoformat(),
     )
 
-    event = get_event(event_id)
+    # Save the pending evidence record.
+    evidence_request = CreateEvidence(
+        evidence_id=evidence_id,
+        event_id=event_id,
+        drone_id=DRONE_ID,
+        stream_key=STREAM_KEY,
+        requested_start=request.start,
+        requested_end=request.end,
+    )
+
+    # Create a separate pending record for the evidence attempt.
+    insert_evidence(evidence_request)
 
     # Retrieve and persist the corresponding video evidence.
-    evidence = await build_evidence(event)
+    evidence = await save_evidence(evidence_request)
 
     return {
         "event_id": event_id,
@@ -175,28 +168,34 @@ async def create_event(
     }
 
 
-@app.post("/events/{event_id}/evidence")
-async def retry_evidence(
-    event_id: str,
-):
-    """
-    Retry evidence creation for an existing event.
+@app.post("/evidence/{evidence_id}/retry")
+async def retry_evidence(evidence_id: str):
+    # Load the original inputs so retries reuse the same identity,
+    # source stream, and requested interval.
+    record = get_evidence(evidence_id)
 
-    This deliberately does NOT generate a new event_id.
-    """
-
-    event = get_event(event_id)
-
-    if event is None:
+    if record is None:
         raise HTTPException(
             status_code=404,
-            detail="event not found",
+            detail="evidence not found",
         )
 
-    evidence = await build_evidence(event)
+    # Convert stored inputs into the request model.
+    # Pydantic parses the saved timestamp strings as datetimes.
+    evidence_request = CreateEvidence(
+        evidence_id=record["evidence_id"],
+        event_id=record["event_id"],
+        drone_id=record["drone_id"],
+        stream_key=record["stream_key"],
+        requested_start=record["requested_start"],
+        requested_end=record["requested_end"],
+    )
+
+    # Reuse the creation workflow and update evidence state.
+    evidence = await save_evidence(evidence_request)
 
     return {
-        "event_id": event_id,
+        "event_id": evidence.event_id,
         "status": "READY",
         "evidence": evidence,
     }
@@ -218,4 +217,8 @@ def read_event(
             detail="event not found",
         )
 
-    return event
+    # Include each clip's creation state and file details.
+    return {
+        **event,
+        "evidence": list_event_evidence(event_id),
+    }
