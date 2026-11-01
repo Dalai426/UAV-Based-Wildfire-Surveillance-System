@@ -1,9 +1,7 @@
 import torch
 import torchvision
-import torch.optim as optim
 import torch.nn as nn
 from torchvision.transforms import v2
-import matplotlib.pyplot as plt
 
 from edge.fineTuning.modelUtils import run_epoch
 
@@ -37,7 +35,8 @@ testloader = torch.utils.data.DataLoader(testData, batch_size=32, shuffle=False,
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net.to(device)
+net.load_state_dict(torch.load("mobilenet_v2_flame3.pth", map_location=device))
 criterion = nn.BCELoss()
-_, testAcc, _, _ = run_epoch(net, testloader, criterion, device=device)
+_, testAcc = run_epoch(net, testloader, criterion, device=device)
 
 print(f"Test Accuracy: {testAcc * 100:.2f}%")
