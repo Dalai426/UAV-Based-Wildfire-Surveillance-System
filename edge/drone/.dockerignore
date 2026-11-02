@@ -1,0 +1,2 @@
+# Keep local settings out of the images
+.env

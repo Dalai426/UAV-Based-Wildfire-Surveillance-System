@@ -16,8 +16,9 @@ Currently implemented:
 - evidence extraction from recorded video
 - evidence metadata and SHA-256 hashing
 - reuse of completed evidence on retries
+- live drone telemetry over MAVLink (UDP 14551)
 
-AI inference, drone telemetry/authentication, and cloud synchronization are planned but not implemented yet.
+AI inference, drone authentication, and cloud synchronization are planned but not implemented yet.
 
 ## Services
 
@@ -49,6 +50,7 @@ It currently:
 - creates evidence metadata
 - calculates a SHA-256 integrity hash
 - supports evidence retries using the same evidence ID
+- receives the drone's telemetry (position, altitude, speed, attitude, battery, flight mode) on UDP 14551 and serves the latest values at `GET /telemetry/latest`
 
 The current `/events` endpoint is used manually for testing. Later, events will be triggered by the detection pipeline.
 
@@ -170,7 +172,8 @@ ground-station/
 │       ├── main.py
 │       ├── db.py
 │       ├── evidence.py
-│       └── schemas.py
+│       ├── schemas.py
+│       └── telemetry.py
 ├── data/
 │   ├── recordings/
 │   ├── evidence/
@@ -355,6 +358,21 @@ The requested footage must still exist within recording retention. Restart the F
 
 Also check invalid requests: missing timezone, reversed/equal timestamps, and intervals above the limit should return `400`; missing fields or unparseable timestamps should return `422`.
 
+### 10. Check the drone telemetry
+
+Start the virtual drone (see `edge/drone/README.md`), then:
+
+```bash
+curl http://localhost:8080/telemetry/latest
+```
+
+`link_status` is `NO LINK` until the drone sends, `NO FIX` while its GPS starts, then `OK`.
+
+Start the ground station **before** the drone. With Docker Desktop, a container can't publish UDP 14551
+while the drone container is already sending to it: the port silently stays closed and the Core
+shows `NO LINK`. To restart the Core while the drone runs, stop the drone's `sitl` container first,
+restart the Core, then start `sitl` again.
+
 ## Development Configuration
 
 The current development setup uses fixed values from `.env`:
@@ -375,7 +393,7 @@ Media recording behavior, retention, and related media settings are configured s
 Planned additions include:
 
 - AI inference from the live video stream
-- drone telemetry and timestamp correlation
+- timestamp correlation between video frames and telemetry
 - drone/session authentication
 - cloud synchronization
 - production transport and storage security

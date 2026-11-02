@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 
@@ -21,6 +22,8 @@ from app.db import (
 from app.evidence import create_evidence
 from app.schemas import CreateEventRequest, CreateEvidence, Evidence
 
+from app.telemetry import TelemetryState, run_telemetry_forever
+
 
 # Main Ground Station Core HTTP API.
 app = FastAPI(
@@ -39,6 +42,19 @@ STREAM_KEY = os.environ["STREAM_KEY"]
 MAX_EVENT_EVIDENCE_SECONDS = 20
 
 
+# Latest telemetry from the drone.
+#
+# Filled by the telemetry receiver (app/telemetry.py),
+# read by GET /telemetry/latest.
+telemetry_state = TelemetryState()
+
+# The background task that runs the telemetry receiver.
+#
+# We keep a reference to it: asyncio only keeps weak references
+# to tasks, so an unreferenced task could disappear mid-run.
+telemetry_task = None
+
+
 @app.on_event("startup")
 def startup():
     """
@@ -47,6 +63,31 @@ def startup():
 
     init_db()
 
+
+@app.on_event("startup")
+async def start_telemetry_receiver():
+    """
+    Start receiving the drone's telemetry in the background.
+
+    It runs as an asyncio task next to the API, so the API stays
+    responsive while telemetry keeps arriving.
+    """
+
+    global telemetry_task
+
+    telemetry_task = asyncio.create_task(
+        run_telemetry_forever(telemetry_state)
+    )
+
+
+@app.on_event("shutdown")
+async def stop_telemetry_receiver():
+    """
+    Stop the telemetry receiver when the Core shuts down.
+    """
+
+    if telemetry_task is not None:
+        telemetry_task.cancel()
 
 
 async def save_evidence(request: CreateEvidence) -> Evidence:
@@ -221,4 +262,17 @@ def read_event(
     return {
         **event,
         "evidence": list_event_evidence(event_id),
+    }
+
+
+@app.get("/telemetry/latest")
+def read_latest_telemetry():
+    """
+    The drone's latest telemetry: position, altitude, speed,
+    attitude, battery, flight mode and the link status.
+    """
+
+    return {
+        "drone_id": DRONE_ID,
+        **telemetry_state.snapshot(),
     }
