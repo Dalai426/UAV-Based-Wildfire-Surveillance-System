@@ -1,0 +1,68 @@
+name: wildfire-drone
+
+services:
+
+  # Simulated flight controller: ArduPilot SITL + MAVProxy.
+  sitl:
+    build:
+      context: ./sitl
+    image: wildfire-drone-sitl
+
+    environment:
+      # Where to send the telemetry (QGroundControl on 14550, the ground station core on 14551).
+      GROUND_HOST: ${GROUND_HOST:-host.docker.internal}
+
+      # Start position: latitude, longitude, altitude (m), heading (degrees).
+      HOME_LOCATION: ${HOME_LOCATION:-55.7670,12.3830,40,0}
+
+    # Keep a terminal open for MAVProxy's command prompt.
+    # Open it with `docker compose attach sitl`, leave it with Ctrl+P then Ctrl+Q.
+    # (Ctrl+C would stop the simulator.)
+    tty: true
+    stdin_open: true
+
+    # Docker Desktop (macOS, Windows) knows host.docker.internal by itself.
+    # On Linux (and later the Raspberry Pi) this line adds it.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    networks:
+      - drone-net
+
+    # Restart the flight controller if it crashes, but not after `docker compose stop`.
+    restart: unless-stopped
+
+    # The drone opens no ports of its own; it only starts connections to the ground station.
+
+  # plays a recorded drone video as a live H.264 stream to MediaMTX
+  camera:
+    build:
+      context: ./camera
+    image: wildfire-drone-camera
+
+    # Arguments for stream_video.sh: [video_file] [bitrate]
+    command: ["/videos/${VIDEO_FILE:-zenmuse.mp4}", "${BITRATE:-4M}"]
+
+    environment:
+      # Where MediaMTX is, and which stream path (one per drone) to publish to.
+      GROUND: ${GROUND_HOST:-host.docker.internal}
+      STREAM_KEY: ${STREAM_KEY:-d7f3a91c}
+
+    volumes:
+      # The folder with the videos, read-only
+      # VIDEO_DIR in .env can point somewhere else.
+      - ${VIDEO_DIR:-./videos}:/videos:ro
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    networks:
+      - drone-net
+
+    # Try again if streaming fails
+    # When the video has played to the end, the script exits normally and the container stays stopped.
+    restart: on-failure
+
+networks:
+  # The drone's own network. Only the drone's containers are in it.
+  drone-net:
