@@ -14,3 +14,13 @@ variable "permissions_for_lambda" {
     log_group_arn = string
   }))
 }
+
+variable "gs_backend_api_execution_arn" {
+  description = "GS Backend API Gateway execution ARN"
+  type        = string
+}
+
+variable "gs_backend_lambda_arn" {
+  description = "GS Backend Lambda Invocation ARN"
+  type        = string
+}
