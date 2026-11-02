@@ -5,14 +5,13 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # Copy dependencies separately so Docker can cache this layer.
-COPY edge/ground-station/ground-station-core/requirements.txt .
+COPY requirements.txt .
 
 # Install Python dependencies.
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the application source.
-COPY edge/ground-station/ground-station-core/app ./app
-COPY shared ./shared
+COPY app ./app
 
 # Start the Ground Station Core HTTP API.
 #

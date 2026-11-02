@@ -40,8 +40,7 @@ services:
   # - persistent event state
   ground-station-core:
     build:
-      context: ../..
-      dockerfile: edge/ground-station/ground-station-core/Dockerfile
+      context: ./ground-station-core
 
     restart: unless-stopped
 
