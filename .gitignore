@@ -11,7 +11,7 @@ Thumbs.db
 !.vscode/extensions.json  # Allow sharing recommended team extensions
 *.code-workspace
 
-
+gs_certificates/
 .idea/
 *.iws
 *.iml

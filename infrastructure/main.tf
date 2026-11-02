@@ -54,9 +54,9 @@ module "storage" {
 module "permissions" {
   source = "./permissions"
   // variables
-  project_name  = var.project_name
-  s3_bucket_arn = module.storage.bucket_arn
-
+  project_name                 = var.project_name
+  s3_bucket_arn                = module.storage.bucket_arn
+  gs_backend_api_execution_arn = "arn:aws:execute-api:eu-north-1:876875539928:3bs1n2thya/prod"
   permissions_for_lambda = {
     "gsBackend" = {
       log_group_arn = module.monitoring.log_group_gs_arn

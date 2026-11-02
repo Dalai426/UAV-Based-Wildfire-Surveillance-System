@@ -1,3 +1,5 @@
+### Commands for Deploying Resources
+API Gateway URL : https://69tln0isqi.execute-api.eu-north-1.amazonaws.com/prod/
 ### Commands for Testing Lambda Functions Locally
 ```bash
 sam build
@@ -18,11 +20,37 @@ sam local start-api --port 3000
 ```bash
 sam build
 pip install watchdog
-watchmedo shell-command --patterns="*.py" --recursive --command='rsync -r --include="*/" --include="*.py" --exclude="*" src/ .aws-sam/build/gsBackendFunction/' src
-FLASK_SKIP_DOTENV=1 sam local start-api --port 3000
+watchmedo shell-command --patterns="*.py" --recursive --command='rsync -rv --include="*/" --include="*.py" --exclude="*" src/ .aws-sam/build/gsBackendFunction/' src
+FLASK_SKIP_DOTENV=1 sam local start-api --port 3000 --env-vars env.json --warm-containers EAGER
 ```
 ### Commands for Deploying Resources
 ```bash
 sam build
-sam deploy --parameter-overrides ParameterKey=LambdaExecutionRoleArn,ParameterValue=$ARN
+sam deploy \
+  --profile ce1-group-ds \
+  --region eu-north-1 \
+  --stack-name drone-surveillance-backend \
+  --parameter-overrides \
+    CloudBackendLambdaFunctionsRoleArn="arn:aws:iam::876875539928:role/drone-surveillance-system-gsBackend-lambda-role" \
+    DBHost="DB_HOST" \
+    DBUser="lambda_functions" \
+    DBPassword="pass" \
+    PrivateSubnetIds="subnet-0eae5d27f27218b41,subnet-02018e9f5cd08e591" \
+    LambdaSecurityGroupId="sg-0e0531599a6615747"
+```
+### How to call the API
+```bash
+curl --location \
+  'https://3bs1n2thya.execute-api.eu-north-1.amazonaws.com/prod/ground-station/alert' \
+  --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" \
+  --aws-sigv4 "aws:amz:eu-north-1:execute-api" \
+  -H "x-amz-security-token: $AWS_SESSION_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_id": "EVT-001",
+    "ground_station_id": "GS-001",
+    "confidence_percent": 98.0,
+    "status": "active",
+    "drone_id": "DRONE-001"
+  }'
 ```

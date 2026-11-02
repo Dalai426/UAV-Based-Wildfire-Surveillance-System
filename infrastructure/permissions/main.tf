@@ -60,11 +60,41 @@ resource "aws_iam_policy" "lambda_logging" {
     }]
   })
 }
-
 resource "aws_iam_role_policy_attachment" "lambda_logging" {
   for_each   = var.permissions_for_lambda
   role       = aws_iam_role.lambda_role[each.key].name
   policy_arn = aws_iam_policy.lambda_logging[each.key].arn
+}
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
+  for_each   = var.permissions_for_lambda
+  role       = aws_iam_role.lambda_role[each.key].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+# The Role for API Gateway to write logs to CloudWatch
+resource "aws_iam_role" "api_gateway_cloudwatch" {
+  name = "${var.project_name}-api-gateway-cloudwatch-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "apigateway.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+resource "aws_iam_role_policy_attachment" "api_gateway_logging" {
+  role       = aws_iam_role.api_gateway_cloudwatch.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+}
+resource "aws_api_gateway_account" "main" {
+  cloudwatch_role_arn = aws_iam_role.api_gateway_cloudwatch.arn
+
+  depends_on = [
+    aws_iam_role_policy_attachment.api_gateway_logging
+  ]
 }
 
 # The Role for IoT Core
@@ -91,13 +121,49 @@ resource "aws_iam_role_policy" "iot_s3_access" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "s3:PutObject"
-      ]
-      Resource = "${var.s3_bucket_arn}"
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = "${var.s3_bucket_arn}"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "execute-api:Invoke"
+        ]
+        Resource = "${var.gs_backend_api_execution_arn}/*"
+      }
+    ]
   })
 }
 
+resource "aws_iot_role_alias" "iot_core_role_alias" {
+  alias               = "GSRoleAlias"
+  role_arn            = aws_iam_role.iot_core_role.arn
+  credential_duration = 3600
+}
+
+# Create the IoT Policy allowing devices to assume the above Role Alias
+resource "aws_iot_policy" "iot_credential_policy" {
+  name = "${var.project_name}-IoT-credential-policy"
+
+  # It controls what an IoT device/certificate can do (connect, publish, subscribe)
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "iot:AssumeRoleWithCertificate"
+        Resource = aws_iot_role_alias.iot_core_role_alias.arn
+      }
+    ]
+  })
+}
+
+data "aws_iot_endpoint" "credential_provider" {
+  endpoint_type = "iot:CredentialProvider"
+}

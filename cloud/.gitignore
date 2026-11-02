@@ -19,6 +19,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+env.json
 *.pem
 *.key
 *.cert
