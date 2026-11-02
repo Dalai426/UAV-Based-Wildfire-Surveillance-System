@@ -13,9 +13,9 @@ CREATE TYPE detection_status AS ENUM (
 
 CREATE TABLE wildfire_detections (
     event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    gs_event_id VARCHAR(100) NOT NULL UNIQUE
-    detection_timestamp TIMESTAMPTZ NOT NULL
-    footage_duration DOUBLE PRECISION NOT NULL
+    gs_event_id VARCHAR(100) NOT NULL UNIQUE,
+    detection_timestamp TIMESTAMPTZ NOT NULL,
+    footage_duration DOUBLE PRECISION NOT NULL,
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
     status detection_status NOT NULL DEFAULT 'active',
