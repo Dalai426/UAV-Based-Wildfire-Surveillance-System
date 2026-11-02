@@ -1,17 +1,3 @@
-# The virtual drone: two containers that together behave like a real drone.
-#
-#   sitl    the simulated flight controller (ArduPilot SITL). Sends MAVLink telemetry.
-#   camera  the simulated camera (stream_video.sh). Sends the live video.
-#
-# Both live in their own Docker network, "drone-net", separate from the ground station.
-# They reach the ground station only through the ports it opens on the host
-# (host.docker.internal), exactly like a separate device would.
-#
-# Settings come from .env (copy .env.example to .env first). See README.md.
-#
-# Start the ground station first (edge/ground-station), then:
-#   docker compose up -d
-
 name: wildfire-drone
 
 services:
@@ -46,15 +32,12 @@ services:
     # Restart the flight controller if it crashes, but not after `docker compose stop`.
     restart: unless-stopped
 
-    # Note: no "ports:" section. The drone opens no ports of its own;
-    # it only starts connections to the ground station.
+    # The drone opens no ports of its own; it only starts connections to the ground station.
 
-  # Simulated camera: plays a recorded drone video as a live H.264 stream to MediaMTX.
+  # plays a recorded drone video as a live H.264 stream to MediaMTX
   camera:
     build:
-      # The build context is this folder, so the Dockerfile can copy stream_video.sh.
-      context: .
-      dockerfile: camera/Dockerfile
+      context: ./camera
     image: wildfire-drone-camera
 
     # Arguments for stream_video.sh: [video_file] [bitrate]
@@ -66,8 +49,9 @@ services:
       STREAM_KEY: ${STREAM_KEY:-d7f3a91c}
 
     volumes:
-      # The folder with the video, read-only. Compose stops with this message if it is not set.
-      - ${VIDEO_DIR:?Set VIDEO_DIR in .env to the folder that contains the video}:/videos:ro
+      # The folder with the videos, read-only
+      # VIDEO_DIR in .env can point somewhere else.
+      - ${VIDEO_DIR:-./videos}:/videos:ro
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -75,7 +59,7 @@ services:
     networks:
       - drone-net
 
-    # Try again if streaming fails (e.g. the ground station isn't running yet).
+    # Try again if streaming fails
     # When the video has played to the end, the script exits normally and the container stays stopped.
     restart: on-failure
 

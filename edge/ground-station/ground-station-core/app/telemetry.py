@@ -7,26 +7,25 @@ from mavsdk.asyncio import ComponentType, Configuration, Mavsdk
 from mavsdk.asyncio.plugins.telemetry import TelemetryAsync, TelemetryError
 
 
-# Where the Core listens for the drone's MAVLink telemetry.
-#
-# "udpin://0.0.0.0:14551" = listen on UDP port 14551 on every
-# network interface of this container. compose.yml publishes
-# this port on the host, so the drone can send to it.
+# Where the GSCore listens for the drone's MAVLink telemetry.
+# compose.yml publishes this port to the host
 TELEMETRY_CONNECTION_URL = os.environ.get(
     "TELEMETRY_CONNECTION_URL",
     "udpin://0.0.0.0:14551",
 )
 
-# No position update for this long -> the link counts as STALE.
+# No position update for this long = the link counts as STALE.
 STALE_AFTER_S = 2.0
 
-# How often we ask the autopilot to send position, velocity
-# and attitude (updates per second).
+# How often we ask the autopilot to send telemetry (times per s)
 TELEMETRY_RATE_HZ = 10.0
 
-# How long to wait before reconnecting after the telemetry
-# receiver failed.
+# How long to wait before reconnecting telemetry receiver failed
 RETRY_AFTER_S = 5.0
+
+# How many decimals the telemetry keeps when it is sent out.
+COORDINATE_DECIMALS = 7
+OTHER_DECIMALS = 3
 
 
 class TelemetryState:
@@ -46,7 +45,6 @@ class TelemetryState:
             "lon": None,
             "alt_rel_home_m": None,
             "alt_amsl_m": None,
-            "heading_deg": None,
 
             # How it moves and how it is tilted
             "vel_north_m_s": None,
@@ -145,6 +143,16 @@ class TelemetryState:
         else:
             data["last_position_utc"] = None
 
+        # Round the numbers before they are sent out.
+        # The stored values (self._data) stay unrounded, so later
+        # calculations can still use full precision.
+        for key, value in data.items():
+            if isinstance(value, float):
+                if key in ("lat", "lon"):
+                    data[key] = round(value, COORDINATE_DECIMALS)
+                else:
+                    data[key] = round(value, OTHER_DECIMALS)
+
         return data
 
 
@@ -206,13 +214,12 @@ async def receive_telemetry(state: TelemetryState, connection_url: str):
                     alt_amsl_m=p.absolute_altitude_m,
                 )
 
-        async def heading():
-            async for h in telemetry.subscribe_heading():
-                state.update(heading_deg=h.heading_deg)
-
         async def attitude():
             # timestamp_us is the autopilot's own clock: when the
             # drone measured this attitude.
+            #
+            # yaw_deg is also the drone's heading (where the nose
+            # points), from -180 to 180 degrees
             async for a in telemetry.subscribe_attitude_euler():
                 state.update(
                     roll_deg=a.roll_deg,
@@ -248,7 +255,6 @@ async def receive_telemetry(state: TelemetryState, connection_url: str):
         await asyncio.gather(
             request_rates(),
             position(),
-            heading(),
             attitude(),
             velocity(),
             battery(),

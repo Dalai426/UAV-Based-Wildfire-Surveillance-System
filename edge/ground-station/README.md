@@ -231,6 +231,8 @@ ffmpeg \
 
 The stream key must match the configured `STREAM_KEY`.
 
+The virtual drone's camera (`edge/drone`) publishes to the same path. Use either this test video or the drone camera, not both.
+
 ### 2. Check that recordings are being created
 
 ```bash
@@ -360,18 +362,13 @@ Also check invalid requests: missing timezone, reversed/equal timestamps, and in
 
 ### 10. Check the drone telemetry
 
-Start the virtual drone (see `edge/drone/README.md`), then:
+Start the virtual drone (please see `edge/drone/README.md` before this step), then:
 
 ```bash
 curl http://localhost:8080/telemetry/latest
 ```
 
-`link_status` is `NO LINK` until the drone sends, `NO FIX` while its GPS starts, then `OK`.
-
-Start the ground station **before** the drone. With Docker Desktop, a container can't publish UDP 14551
-while the drone container is already sending to it: the port silently stays closed and the Core
-shows `NO LINK`. To restart the Core while the drone runs, stop the drone's `sitl` container first,
-restart the Core, then start `sitl` again.
+Everything you need to know is explained in `edge/drone/README.md`.
 
 ## Development Configuration
 

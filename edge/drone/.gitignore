@@ -1,0 +1,7 @@
+# Local environment / secrets
+.env
+
+# Videos for the simulated camera (large files, kept locally).
+# The empty .gitkeep keeps the folder itself in git.
+videos/*
+!videos/.gitkeep
