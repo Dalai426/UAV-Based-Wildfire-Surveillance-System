@@ -15,13 +15,13 @@ class Drone(BaseModel):
     battery_status: str = Field(min_length=1)
 
 class DetectionEvent(BaseModel):
-    event_id: str = Field(min_length=1, max_length=35)
-    ground_station_id: str = Field(min_length=1, max_length=35)
+    event_id: str = Field(min_length=1, max_length=80)
+    ground_station_id: str = Field(min_length=1, max_length=80)
     ground_station: GroundStation
     confidence_percent: float = Field(ge=0, le=100)
     detection_time: datetime
     footage_duration: float = Field(ge=0)
     status: str = Field(min_length=1, max_length=35)
     coordinates: Coordinates
-    drone_id: str = Field(min_length=1, max_length=35)
+    drone_id: str = Field(min_length=1, max_length=80)
     drone: Drone
