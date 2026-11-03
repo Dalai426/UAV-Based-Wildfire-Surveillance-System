@@ -5,7 +5,7 @@ import boto3
 from shared_configs.logger_config import logger
 from handlers.email_broadcaster import broadcast_emails
 
-
+batch_size = 2
 lambda_client = boto3.client("lambda")
 is_local = os.environ.get("AWS_SAM_LOCAL") == "true"
 
@@ -52,7 +52,6 @@ def invoke_notification_batch(data, batch, index, message_id):
 def noti_events_handler(data, event):
     message_id=event.get("message_id")
     emails = ["gadalai426@gmail.com", "dgantu26@student.aau.dk"]
-    batch_size = 1
     if not emails:
         logger.warning("No users available for notification")
         return {"success": True, "message": "No users to notify"}
