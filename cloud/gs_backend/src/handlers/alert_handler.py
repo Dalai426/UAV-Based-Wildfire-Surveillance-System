@@ -1,4 +1,4 @@
-from configs.logger_config import logger
+from shared_configs.logger_config import logger
 from models.detectionEvent import DetectionEvent
 from configs.db_config import get_db_pool
 import json
@@ -7,14 +7,13 @@ import asyncpg
 async def handle_alert(data):
     logger.info("Request Body: %s", data.get("body"))
     body = data.get("body") or "{}"
-    print(data)
     event_json = json.loads(body)
     event = DetectionEvent.model_validate(event_json)
     row = await insertEvent(event)
     return {
         "success":True,
         "data": {
-            "event_id": str(row["event_id"]),
+            "event_id": str(row["gs_event_id"]),
             "created_at": row["created_at"].isoformat()
         }
     }
@@ -45,7 +44,7 @@ async def insertEvent(event:DetectionEvent):
                         ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography,
                         $7, $8, $9::jsonb, $10, $11::jsonb
                     )
-                    RETURNING event_id, created_at
+                    RETURNING gs_event_id, created_at
                     """,
                     event.event_id,
                     event.detection_time,

@@ -3,16 +3,16 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 
 class GroundStation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
 class Coordinates(BaseModel):
     longitude: float = Field(ge=-180, le=180)
     latitude: float = Field(ge=-90, le=90)
 
 class Drone(BaseModel):
+    model_config = ConfigDict(extra="allow")
     speed: float = Field(ge=0)
-    altitude: float = Field(ge=0)
-    battery_status: str = Field(min_length=1)
+    battery_status: str = Field(min_length=0)
 
 class DetectionEvent(BaseModel):
     event_id: str = Field(min_length=1, max_length=80)
