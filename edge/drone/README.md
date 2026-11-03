@@ -13,8 +13,9 @@ Currently implemented:
 - simulated camera: recorded footage streamed live as H.264 over RTSP to MediaMTX
 - separate Docker network for the drone, no published ports
 - automatic restart of the camera if the ground station is not reachable yet
+- automatic flight of the survey path in `sitl/flight.plan` on every start
 
-A fixed flight path (mission file), encryption, and running the drone on a Raspberry Pi 5 are planned but not implemented yet.
+Encryption and running the drone on a Raspberry Pi 5 are planned but not implemented yet.
 
 ## Services
 
@@ -29,8 +30,11 @@ It:
 - sends MAVLink to QGroundControl and to the Ground Station Core
 - receives commands back over the same connections (arm, take off, missions)
 - resets its settings at every start, so every run begins the same way
+- flies the survey path in `flight.plan` automatically on every start
 
 The image is built in two stages: a build stage compiles ArduPilot once, and a small runtime image keeps only the compiled simulator, `sim_vehicle.py` and MAVProxy. MAVProxy is installed without its window libraries (`--no-deps`), which saves about 1.2 GB.
+
+`fly_mission.py` does the automatic flight: it uploads `flight.plan` (a QGroundControl plan file), waits until the drone is ready (GPS and position estimate, about 40 seconds), arms it in AUTO mode and logs the progress. After landing it logs how long the flight took.
 
 ### Camera
 
@@ -43,9 +47,22 @@ It:
 - publishes it over RTSP (TCP) to MediaMTX (`STREAM_KEY`)
 - restarts by itself if MediaMTX is not reachable; the video then plays from the beginning
 
-### QGroundControl (temporary)
+### QGroundControl (optional)
 
-[QGroundControl](https://qgroundcontrol.com) is a desktop app. For now it is used to steer the drone, change its parameters and plan the flight path. Once the flight path exists as a mission file, QGroundControl will be removed from the pipeline, together with the output to UDP 14550.
+[QGroundControl](https://qgroundcontrol.com) is a desktop app. It is not needed to fly: the drone flies `flight.plan` by itself. It is used to:
+
+- edit the flight path: open `sitl/flight.plan`, change it, save it, then rebuild the drone (`docker compose up -d --build sitl`)
+- watch the drone on a map while it flies (it receives the telemetry on UDP 14550)
+
+
+
+### Flight path
+
+![The flight path in QGroundControl](images/flight-path.png)
+
+Upon opening the `flight.plan`, you can see the above. The drone flies a back and forth path over the forest. It then flies back past home and lands there. The path is about 4.2 km long and takes about 16 minutes.
+
+The graph below the map shows the planned altitude (orange) and the ground height (green) along the path, in metres above sea level.
 
 ## How the Drone Connects
 
@@ -58,7 +75,7 @@ flowchart TB
     end
 
     subgraph GSTATION["Ground station"]
-        QGC["<b>QGroundControl</b><br/>desktop app, for now<br/>steering, parameters, missions"]
+        QGC["<b>QGroundControl</b><br/>desktop app, optional<br/>edit flight plan, watch drone"]
         subgraph GS["Ground station (Docker)"]
             MTX["<b>Media server</b><br/>container: media-server<br/>MediaMTX<br/>records the last 10 min"]
             AI["<b>AI inference</b><br/>planned"]
@@ -79,7 +96,7 @@ The drone only opens connections; nothing can connect to it. Data still flows bo
 | Port | Protocol | Receiver |
 |---|---|---|
 | 8554 | TCP (RTSP) | MediaMTX: live video |
-| 14550 | UDP (MAVLink) | QGroundControl (for now) |
+| 14550 | UDP (MAVLink) | QGroundControl (optional) |
 | 14551 | UDP (MAVLink) | Ground Station Core: telemetry |
 
 The AI inference service reads the live video from MediaMTX inside the ground station's Docker network (`rtsp://media-server:8554/d7f3a91c`, over TCP); it does not connect to the drone.
@@ -94,10 +111,14 @@ drone/
 ├── compose.yml
 ├── sitl/
 │   ├── Dockerfile
+│   ├── flight.plan
+│   ├── fly_mission.py
 │   └── start_sitl.sh
 ├── camera/
 │   ├── Dockerfile
 │   └── stream_video.sh
+├── images/
+│   └── flight-path.png
 └── videos/
     └── zenmuse.mp4
 ```
@@ -132,19 +153,27 @@ cd ../ground-station && docker compose up -d
 cd ../drone && docker compose up -d
 ```
 
+About 40 seconds after the start, the drone takes off by itself and flies the flight path (see Flight path). After about 16 minutes it lands back at home.
+
 Check that the drone's containers are running:
 
 ```bash
 docker compose ps
 ```
 
-Stop the drone:
+To fly a changed flight path, edit `sitl/flight.plan` in QGroundControl, save it, then rebuild and restart the drone:
+
+```bash
+docker compose up -d --build sitl
+```
+
+To stop the drone:
 
 ```bash
 docker compose down
 ```
 
-Stop the ground station:
+To stop the ground station:
 
 ```bash
 cd ../ground-station && docker compose down
@@ -160,7 +189,7 @@ Asks the Core for the drone's latest telemetry. This proves that MAVLink gets fr
 curl http://localhost:8080/telemetry/latest
 ```
 
-The answer looks like this (`curl` prints it on one line without the comments; shown formatted and commented here). All numbers are rounded: `lat` and `lon` to 7 decimals, everything else to 3.
+The answer looks like this (shown formatted and commented here for better readability).
 
 ```jsonc
 {
@@ -194,9 +223,13 @@ If the drone stops sending and no position has arrived within 2 seconds, `link_s
 
 Plays the stream from MediaMTX. This proves that the video gets from the drone's network to the ground station and that MediaMTX passes it on, which AI inference depends on.
 
-```bash
-ffplay rtsp://localhost:8554/d7f3a91c
+Open [VLC](https://www.videolan.org) (Windows, macOS, Linux), choose File → Open Network and enter:
+
+```text
+rtsp://localhost:8554/d7f3a91c
 ```
+
+MediaMTX only accepts RTSP over TCP. If the picture stays black, enable "Use RTP over RTSP (TCP)" in VLC's preferences (Show All → Input/Codecs → Demuxers → RTP/RTSP).
 
 ### 3. Check that the video keeps up in real time
 
@@ -233,21 +266,11 @@ Shows the simulator's messages: GPS detected, mode changes, errors. This is the 
 docker compose logs -f sitl
 ```
 
-### 5. Use the MAVProxy prompt
+### 5. Watch the drone in QGroundControl
 
-Sends commands straight to the flight controller, without QGroundControl. This proves that the drone accepts commands, and it is how a mission file will be loaded later.
+Shows the drone on a map while it flies the flight path.
 
-```bash
-docker compose attach sitl
-```
-
-Type commands such as `mode guided` or `arm throttle`. Leave with `Ctrl+P` then `Ctrl+Q`; `Ctrl+C` stops the simulator.
-
-### 6. Fly with QGroundControl
-
-Flies a mission. This proves that commands travel back to the drone through Docker, and gives the Core moving telemetry to work with instead of a drone standing still.
-
-Open QGroundControl. It connects by itself. Wait for the GPS fix (about 40 seconds after the start), then plan, upload and start a mission. The video is about 16 minutes long.
+Open QGroundControl. It connects by itself and shows the drone's position, the flight path, and its altitude, speed, battery and flight mode. The drone takes off a couple of seconds after the start (there may be some warning messages - ignore them). The whole flight takes approx. 16 minutes, about as long as the video.
 
 ## Development Configuration
 
@@ -278,7 +301,6 @@ HOME_LOCATION=55.7670,12.3830,40,0
 
 Planned additions include:
 
-- a mission file that roughly follows the recorded footage, replacing QGroundControl
 - telemetry routed through the camera container, so the drone has one exit like a real drone
 - encrypted video and telemetry (RTSPS or SRT, WireGuard, MAVLink 2 signing)
 - running the drone containers on a Raspberry Pi 5 as a separate physical device

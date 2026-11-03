@@ -8,9 +8,7 @@
 #
 # Build it with `docker compose build` in edge/drone (see README.md).
 
-# ---------------------------------------------------------------------------
 # Stage 1: download and compile ArduPilot
-# ---------------------------------------------------------------------------
 FROM ubuntu:22.04 AS build
 
 # The ArduPilot release to build. A fixed release means everyone on the team flies the same code.
@@ -49,9 +47,7 @@ RUN SKIP_AP_EXT_ENV=1 SKIP_AP_GRAPHIC_ENV=1 SKIP_AP_COV_ENV=1 SKIP_AP_GIT_CHECK=
 # ~/.ardupilot_env, so we load them first. Result: build/sitl/bin/arducopter
 RUN bash -c "source ~/.ardupilot_env && ./waf configure --board sitl && ./waf copter"
 
-# ---------------------------------------------------------------------------
 # Stage 2: the small image that actually runs the simulator
-# ---------------------------------------------------------------------------
 FROM ubuntu:22.04 AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -86,6 +82,10 @@ COPY --from=build /home/ardupilot/ardupilot/Tools/autotest /ardupilot/Tools/auto
 
 # Our start script (see start_sitl.sh for the options it uses).
 COPY start_sitl.sh /usr/local/bin/start_sitl.sh
+
+# The flight path (flown automatically on every start) and the script that flies it.
+COPY flight.plan /missions/flight.plan
+COPY fly_mission.py /usr/local/bin/fly_mission.py
 
 # sim_vehicle.py expects a folder named after the vehicle. The simulator also writes its
 # settings (eeprom.bin) and flight logs there.
