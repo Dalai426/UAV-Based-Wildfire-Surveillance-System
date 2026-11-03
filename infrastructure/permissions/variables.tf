@@ -8,6 +8,11 @@ variable "s3_bucket_arn" {
   type        = string
 }
 
+variable "sqs_consume_policy_arn" {
+  description = "The Arn of Sqs Consume Policy for Lambda functions"
+  type        = string
+}
+
 variable "permissions_for_lambda" {
   description = "Permissions for Lambda functions"
   type = map(object({

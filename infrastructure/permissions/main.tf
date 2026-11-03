@@ -1,9 +1,7 @@
 # The Role for Lambda Functions.
 resource "aws_iam_role" "lambda_role" {
-
   for_each = var.permissions_for_lambda
-
-  name = "${var.project_name}-${each.key}-lambda-role"
+  name     = "${var.project_name}-${each.key}-lambda-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -18,6 +16,7 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
+# The Lambda Role's Policy for VPC Access.
 resource "aws_iam_policy" "lambda_vpc_access" {
   name        = "${var.project_name}-lambda-vpc-access"
   description = "Allow Lambda to manage network interfaces for VPC access"
@@ -43,6 +42,7 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
   policy_arn = aws_iam_policy.lambda_vpc_access.arn
 }
 
+# The Lambda Role's Policy for Logging.
 resource "aws_iam_policy" "lambda_logging" {
   for_each    = var.permissions_for_lambda
   name        = "${var.project_name}-${each.key}-lambda-logging"
@@ -65,11 +65,20 @@ resource "aws_iam_role_policy_attachment" "lambda_logging" {
   role       = aws_iam_role.lambda_role[each.key].name
   policy_arn = aws_iam_policy.lambda_logging[each.key].arn
 }
+
+# Attaching SQS consume policy to Lambda role
+resource "aws_iam_role_policy_attachment" "sqs_consume_policy" {
+  role       = aws_iam_role.lambda_role["gsBackend"].name
+  policy_arn = var.sqs_consume_policy_arn
+}
+
+# The Lambda Role's Policy for Basic Execution.
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   for_each   = var.permissions_for_lambda
   role       = aws_iam_role.lambda_role[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
+
 # The Role for API Gateway to write logs to CloudWatch
 resource "aws_iam_role" "api_gateway_cloudwatch" {
   name = "${var.project_name}-api-gateway-cloudwatch-role"
@@ -166,4 +175,26 @@ resource "aws_iot_policy" "iot_credential_policy" {
 
 data "aws_iot_endpoint" "credential_provider" {
   endpoint_type = "iot:CredentialProvider"
+}
+
+# Optional: If we use SES, we can use it.
+resource "aws_iam_policy" "lambda_ses_access" {
+  name        = "${var.project_name}-lambda-ses-access"
+  description = "Allow Lambda to send emails using Amazon SES"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ses:SendEmail"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_ses_access" {
+  role       = aws_iam_role.lambda_role["gsBackend"].name
+  policy_arn = aws_iam_policy.lambda_ses_access.arn
 }

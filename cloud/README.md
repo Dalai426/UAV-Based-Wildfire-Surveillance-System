@@ -5,10 +5,11 @@ API Gateway URL : https://69tln0isqi.execute-api.eu-north-1.amazonaws.com/prod/
 sam build
 sam local invoke [function_name] --event [event_json]
 ```
-**Example for the ground-station backend**
+**Examples for Invoking Backend Functions**
 ```bash
 sam build
-sam local invoke gsBackendFunction --event src/events/alert/wildfire_alert_body.json
+sam local invoke gsBackendFunction --event ./events/alert/wildfire_alert_body.json --env-vars env.json 
+AWS_PROFILE=ce1-group-ds sam local invoke emailSenderFunction --event ./events/sqs/email_sqs.json --env-vars env.json 
 ```
 ### Commands for Testing API gateway
 ```bash
@@ -21,7 +22,7 @@ sam local start-api --port 3000
 sam build
 pip install watchdog
 watchmedo shell-command --patterns="*.py" --recursive --command='rsync -rv --include="*/" --include="*.py" --exclude="*" src/ .aws-sam/build/gsBackendFunction/' src
-FLASK_SKIP_DOTENV=1 sam local start-api --port 3000 --env-vars env.json --warm-containers EAGER
+FLASK_SKIP_DOTENV=1 AWS_PROFILE=ce1-group-ds sam local start-api --port 3000 --env-vars env.json --warm-containers EAGER
 ```
 ### Commands for Deploying Resources
 ```bash
@@ -36,7 +37,9 @@ sam deploy \
     DBUser="lambda_functions" \
     DBPassword="pass" \
     PrivateSubnetIds="subnet-0eae5d27f27218b41,subnet-02018e9f5cd08e591" \
-    LambdaSecurityGroupId="sg-0e0531599a6615747"
+    LambdaSecurityGroupId="sg-0e0531599a6615747" \
+    EmailBroadcastQueueArn="arn:aws:sqs:eu-north-1:876875539928" \
+    EmailBroadcastQueueUrl="https://sqs.eu-north-1.amazonaws.com/876875539928/drone-surveillance-system-broadcast-email-queue"
 ```
 ### How to call the API
 ```bash

@@ -17,3 +17,13 @@ output "db_endpoint" {
   value       = module.database.db_endpoint
   description = "The Database Endpoint"
 }
+
+output "email_broadcast_queue_url" {
+  value       = module.sqs.email_broadcast_queue_url
+  description = "The Email Broadcast Queue URL"
+}
+
+output "email_broadcast_queue_arn" {
+  value       = module.sqs.email_broadcast_queue_arn
+  description = "The Email Broadcast Queue ARN"
+}
