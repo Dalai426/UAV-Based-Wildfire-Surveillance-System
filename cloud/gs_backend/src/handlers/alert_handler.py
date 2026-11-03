@@ -14,7 +14,7 @@ async def handle_alert(data):
     return {
         "success":True,
         "data": {
-            "event_id": str(row["event_id"]),
+            "event_id": str(row["gs_event_id"]),
             "created_at": row["created_at"].isoformat()
         }
     }
@@ -45,7 +45,7 @@ async def insertEvent(event:DetectionEvent):
                         ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography,
                         $7, $8, $9::jsonb, $10, $11::jsonb
                     )
-                    RETURNING event_id, created_at
+                    RETURNING gs_event_id, created_at
                     """,
                     event.event_id,
                     event.detection_time,
