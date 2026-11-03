@@ -1,4 +1,4 @@
-from configs.logger_config import logger
+from shared_configs.logger_config import logger
 from models.detectionEvent import DetectionEvent
 from configs.db_config import get_db_pool
 import json
@@ -7,7 +7,6 @@ import asyncpg
 async def handle_alert(data):
     logger.info("Request Body: %s", data.get("body"))
     body = data.get("body") or "{}"
-    print(data)
     event_json = json.loads(body)
     event = DetectionEvent.model_validate(event_json)
     row = await insertEvent(event)

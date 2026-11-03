@@ -1,0 +1,19 @@
+{
+  "Records": [
+    {
+      "messageId": "test-message-001",
+      "receiptHandle": "test-receipt-handle",
+      "body": "{\"action\":\"notifyUsers\",\"data\":{\"subject\":\"Wildfire alert\",\"message\":\"A wildfire has been detected.\"}}",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1730000000000",
+        "SenderId": "123456789012",
+        "ApproximateFirstReceiveTimestamp": "1730000000000"
+      },
+      "messageAttributes": {},
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:eu-north-1:123456789012:test-email-queue",
+      "awsRegion": "eu-north-1"
+    }
+  ]
+}

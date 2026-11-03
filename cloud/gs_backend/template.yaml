@@ -12,6 +12,10 @@ Globals:
 Parameters:
   CloudBackendLambdaFunctionsRoleArn:
     Type: String
+  EmailBroadcastQueueArn:
+    Type: String
+  EmailBroadcastQueueUrl:
+    Type: String
   DBHost:
     Type: String
   DBUser:
@@ -24,6 +28,16 @@ Parameters:
   LambdaSecurityGroupId:
     Type: String
 Resources:
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: drone-shared-layer
+      Description: Shared utilities for Drone Surveillance System
+      ContentUri: shared/
+      CompatibleRuntimes:
+        - python3.13
+    Metadata:
+      BuildMethod: python3.13
   GsBackendApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -43,6 +57,8 @@ Resources:
     Properties:
       Environment:
         Variables:
+          EMAIL_BROADCAST_URL:
+            Ref: EmailBroadcastQueueUrl
           DB_HOST:
             Ref: DBHost
           DB_NAME: wf_detection
@@ -53,6 +69,8 @@ Resources:
           DB_PORT: "5432"
       CodeUri: src/
       Handler: app.handler
+      Layers:
+        - Ref: SharedLayer
       Role:
         Ref: CloudBackendLambdaFunctionsRoleArn
       Runtime: python3.13
@@ -74,6 +92,30 @@ Resources:
               Ref: GsBackendApi
             Path: /ground-station/alert
             Method: post
+    Metadata:
+      BuildMethod: python3.13
+  emailSenderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: noti_lambda/
+      Handler: app.handler
+      Layers:
+        - Ref: SharedLayer
+      Role:
+        Ref: CloudBackendLambdaFunctionsRoleArn
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: "/drone-surveillance-system/gs/logs"
+      Events:
+        EmailBroadcastQueueEvent:
+          Type: SQS
+          Properties:
+            Queue:
+              Ref: EmailBroadcastQueueArn
+            BatchSize: 1
     Metadata:
       BuildMethod: python3.13
 

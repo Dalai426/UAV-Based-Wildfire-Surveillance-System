@@ -1,5 +1,5 @@
 import json
-from configs.logger_config import logger
+from shared_configs.logger_config import logger
 from configs.async_loop_config import loop
 from handlers.alert_handler import handle_alert
 from pydantic import ValidationError
