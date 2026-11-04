@@ -87,6 +87,10 @@ COPY start_sitl.sh /usr/local/bin/start_sitl.sh
 COPY flight.plan /missions/flight.plan
 COPY fly_mission.py /usr/local/bin/fly_mission.py
 
+# The simulator model that gives the drone the battery drain of a DJI Mavic Air.
+# It goes in the simulator's working folder, because the simulator only loads relative paths.
+COPY mavic-battery.json /ardupilot/ArduCopter/mavic-battery.json
+
 # sim_vehicle.py expects a folder named after the vehicle. The simulator also writes its
 # settings (eeprom.bin) and flight logs there.
 RUN mkdir -p /ardupilot/ArduCopter && chown -R drone:drone /ardupilot/ArduCopter

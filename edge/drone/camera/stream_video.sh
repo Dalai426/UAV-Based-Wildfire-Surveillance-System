@@ -1,34 +1,18 @@
 #!/usr/bin/env bash
-# Safety settings: stop on problems instead of carrying on silently.
-# -e           if a command fails (e.g. the video is missing or ffmpeg can't connect to MediaMTX),
-#              the script stops with an error code. Docker sees that code and restarts the camera
-#              (restart: on-failure in compose.yml).
-# -u           using a variable that was never set (e.g. a typo like $STREAM_KYE) stops the script
-#              instead of quietly using empty text. Optional settings have a default, e.g.
-#              ${STREAM_KEY:-d7f3a91c}, so they never trigger this.
-# -o pipefail  a pipe fails if any part of it fails. Needed for "ffmpeg ... | print_progress"
-#              below: without it, a failing ffmpeg would be hidden behind the filter's success,
-#              and Docker would not restart the camera.
+
+# Safety settings:
+# -e           if a command fails the script stops with an error code
+# -u           using a variable that was never set stops the script
+# -o pipefail  a pipe fails if any part of it fails print_progress()
 set -euo pipefail
 
-VIDEO="${1:-/videos/zenmuse.mp4}"
-BITRATE="${2:-4M}"                 # typical drone downlinks: 2-8 Mbit/s
-GROUND="${GROUND:-host.docker.internal}" # the ground station: the computer the containers run on
-RTSP_PORT=8554                     # MediaMTX's RTSP port (see edge/ground-station/compose.yml)
-STREAM_KEY="${STREAM_KEY:-d7f3a91c}" # MediaMTX path for this drone; must match STREAM_KEY in edge/ground-station/.env
-STREAM_URL="rtsp://$GROUND:$RTSP_PORT/$STREAM_KEY"
-
-if ! command -v ffmpeg >/dev/null; then
-    echo "ffmpeg not found. Install it with: sudo apt install -y ffmpeg" >&2
-    exit 1
-fi
-if [ ! -f "$VIDEO" ]; then
-    echo "Video not found: $VIDEO" >&2
-    exit 1
-fi
+VIDEO="$1"
+BITRATE="$2"
+RTSP_PORT=8554  # MediaMTX's RTSP port
+STREAM_URL="rtsp://$GROUND_HOST:$RTSP_PORT/$STREAM_KEY"
 
 # Short start message, e.g. "Streaming zenmuse.mp4 at 4M to host.docker.internal:8554/d7f3a91c (MediaMTX)"
-echo "Streaming $(basename "$VIDEO") at $BITRATE to $GROUND:$RTSP_PORT/$STREAM_KEY (MediaMTX)"
+echo "Streaming $(basename "$VIDEO") at $BITRATE to $GROUND_HOST:$RTSP_PORT/$STREAM_KEY (MediaMTX)"
 
 # Turns ffmpeg's progress reports into one short log line each.
 print_progress() {
@@ -43,6 +27,7 @@ print_progress() {
 }
 
 # -re                      read at native speed, like a live camera
+# -map 0:v:0               send only the first video track (no audio)
 # -r 30                    constant 30 FPS like a real drone camera (zenmuse.mp4 has a variable frame rate;
 #                          without this, ffmpeg would pad it to 120 FPS)
 # -tune zerolatency        no B-frames / lookahead, as on-drone encoders do
@@ -60,7 +45,7 @@ print_progress() {
 # error and Docker restarts the camera (restart: on-failure in compose.yml).
 ffmpeg -hide_banner -loglevel warning -nostats -progress pipe:1 -stats_period 5 \
     -re -i "$VIDEO" \
-    -map 0:v:0 -an -r 30 \
+    -map 0:v:0 -r 30 \
     -c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p \
     -b:v "$BITRATE" -maxrate "$BITRATE" -bufsize "$BITRATE" \
     -g 30 -keyint_min 30 -sc_threshold 0 \
