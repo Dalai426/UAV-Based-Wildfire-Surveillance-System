@@ -67,13 +67,20 @@ Resources:
         LogFormat: JSON
         LogGroup: "/drone-surveillance-system/dashboard/logs"
       Events:
-        SendAlertData:
+        ListIncidents:
           Type: Api
           Properties:
             RestApiId:
               Ref: DashboardBackendApi
             Path: /incidents
             Method: get
+        CloseIncident:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: DashboardBackendApi
+            Path: /incidents/{gs_event_id}/close
+            Method: post
     Metadata:
       BuildMethod: python3.13
 Outputs:
