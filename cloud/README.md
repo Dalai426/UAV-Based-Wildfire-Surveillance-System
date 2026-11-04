@@ -9,7 +9,7 @@ sam local invoke [function_name] --event [event_json]
 ```bash
 sam build
 sam local invoke gsBackendFunction --event ./events/alert/wildfire_alert_body.json --env-vars env.json 
-AWS_PROFILE=ce1-group-ds sam local invoke emailSenderFunction --event ./events/sqs/email_sqs.json --env-vars env.json 
+AWS_PROFILE=ce1-group-ds sam local invoke emailSubscriptionListener --event ./events/email_subscription/event_pre_auth.json --env-vars env.json 
 ```
 ### Commands for Testing API gateway
 ```bash
@@ -33,13 +33,14 @@ sam deploy \
   --stack-name drone-surveillance-backend \
   --parameter-overrides \
     CloudBackendLambdaFunctionsRoleArn="arn:aws:iam::876875539928:role/drone-surveillance-system-gsBackend-lambda-role" \
-    DBHost="DB_HOST" \
+    DashboardBackendLambdaFunctionsRoleArn="arn:aws:iam::876875539928:role/drone-surveillance-system-dashboardBackend-lambda-role" \
+    DBHost="drone-surveillance-system-eu-north-1-db.cfog8cc8ilss.eu-north-1.rds.amazonaws.com" \
     DBUser="lambda_functions" \
-    DBPassword="pass" \
+    DBPassword="@@@" \
     PrivateSubnetIds="subnet-0eae5d27f27218b41,subnet-02018e9f5cd08e591" \
     LambdaSecurityGroupId="sg-0e0531599a6615747" \
-    EmailBroadcastQueueArn="arn:aws:sqs:eu-north-1:876875539928" \
-    EmailBroadcastQueueUrl="https://sqs.eu-north-1.amazonaws.com/876875539928/drone-surveillance-system-broadcast-email-queue"
+    SnsTopicArn="arn:aws:sns:eu-north-1:876875539928:drone-surveillance-system-user-notifications" \
+    UserPoolArn="arn:aws:cognito-idp:eu-north-1:876875539928:userpool/eu-north-1_yiBrC3S2O"
 ```
 ### How to call the API
 ```bash

@@ -18,12 +18,7 @@ output "db_endpoint" {
   description = "The Database Endpoint"
 }
 
-output "email_broadcast_queue_url" {
-  value       = module.sqs.email_broadcast_queue_url
-  description = "The Email Broadcast Queue URL"
-}
-
-output "email_broadcast_queue_arn" {
-  value       = module.sqs.email_broadcast_queue_arn
-  description = "The Email Broadcast Queue ARN"
+output "sns_topic_arn" {
+  value       = module.sns.sns_topic_arn
+  description = "The SNS Topic ARN"
 }

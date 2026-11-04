@@ -51,8 +51,8 @@ module "storage" {
   s3_bucket_name = local.s3_bucket_name
 }
 
-module "sqs" {
-  source = "./sqs"
+module "sns" {
+  source = "./sns"
   // variables
   project_name = var.project_name
 }
@@ -63,7 +63,7 @@ module "permissions" {
   project_name                 = var.project_name
   s3_bucket_arn                = module.storage.bucket_arn
   gs_backend_api_execution_arn = "arn:aws:execute-api:eu-north-1:876875539928:3bs1n2thya/prod"
-  sqs_consume_policy_arn       = module.sqs.consume_sqs_role_policy_arn
+  sns_policy_arn               = module.sns.sns_role_policy_arn
   permissions_for_lambda = {
     "gsBackend" = {
       log_group_arn = module.monitoring.log_group_gs_arn
