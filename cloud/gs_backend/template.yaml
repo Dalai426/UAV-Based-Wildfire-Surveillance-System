@@ -12,9 +12,9 @@ Globals:
 Parameters:
   CloudBackendLambdaFunctionsRoleArn:
     Type: String
-  EmailBroadcastQueueArn:
+  DashboardBackendLambdaFunctionsRoleArn:
     Type: String
-  EmailBroadcastQueueUrl:
+  SnsTopicArn:
     Type: String
   DBHost:
     Type: String
@@ -23,6 +23,8 @@ Parameters:
   DBPassword:
     Type: String
     NoEcho: True
+  UserPoolArn:
+    Type: String
   PrivateSubnetIds:
     Type: CommaDelimitedList
   LambdaSecurityGroupId:
@@ -57,8 +59,6 @@ Resources:
     Properties:
       Environment:
         Variables:
-          EMAIL_BROADCAST_URL:
-            Ref: EmailBroadcastQueueUrl
           DB_HOST:
             Ref: DBHost
           DB_NAME: wf_detection
@@ -67,6 +67,8 @@ Resources:
           DB_PASSWORD:
             Ref: DBPassword
           DB_PORT: "5432"
+          SNS_TOPIC_ARN:
+            Ref: SnsTopicArn
       CodeUri: src/
       Handler: app.handler
       Layers:
@@ -94,31 +96,34 @@ Resources:
             Method: post
     Metadata:
       BuildMethod: python3.13
-  emailSenderFunction:
+  emailSubscriptionListener:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: noti_lambda/
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN:
+            Ref: SnsTopicArn
+      CodeUri: email_subscription/
       Handler: app.handler
       Layers:
         - Ref: SharedLayer
       Role:
-        Ref: CloudBackendLambdaFunctionsRoleArn
+        Ref: DashboardBackendLambdaFunctionsRoleArn
       Runtime: python3.13
       Architectures:
         - x86_64
       LoggingConfig:
         LogFormat: JSON
-        LogGroup: "/drone-surveillance-system/gs/logs"
-      Events:
-        EmailBroadcastQueueEvent:
-          Type: SQS
-          Properties:
-            Queue:
-              Ref: EmailBroadcastQueueArn
-            BatchSize: 1
+        LogGroup: "/drone-surveillance-system/dashboard/logs"
     Metadata:
       BuildMethod: python3.13
-
+  CognitoEmailSenderFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref emailSubscriptionListener
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !Ref UserPoolArn
 Outputs:
   CloudBackendUrl:
     Description: API Gateway URL

@@ -3,6 +3,11 @@ from models.detectionEvent import DetectionEvent
 from configs.db_config import get_db_pool
 import json
 import asyncpg
+import boto3
+import os 
+from handlers.email_body import get_email_body
+
+sns = boto3.client("sns")
 
 async def handle_alert(data):
     logger.info("Request Body: %s", data.get("body"))
@@ -10,6 +15,7 @@ async def handle_alert(data):
     event_json = json.loads(body)
     event = DetectionEvent.model_validate(event_json)
     row = await insertEvent(event)
+    await notifyUsers(event)
     return {
         "success":True,
         "data": {
@@ -17,6 +23,20 @@ async def handle_alert(data):
             "created_at": row["created_at"].isoformat()
         }
     }
+
+async def notifyUsers(event:DetectionEvent):
+    try:
+        sns.publish(
+            TopicArn=os.environ["SNS_TOPIC_ARN"],
+            Subject="Wildfire Alert",
+            Message=get_email_body(event)
+        )
+        logger.info("The event %s is notified to subscribed users")
+        return True
+    except Exception as exc:
+        logger.error(exc)
+        return False
+
 
 async def insertEvent(event:DetectionEvent):
     pool = await get_db_pool()

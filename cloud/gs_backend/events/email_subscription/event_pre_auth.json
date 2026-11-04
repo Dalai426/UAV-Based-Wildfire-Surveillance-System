@@ -1,0 +1,22 @@
+{
+    "version": "1",
+    "triggerSource": "PreAuthentication_Authentication",
+    "region": "eu-north-1",
+    "userPoolId": "eu-north-1_yiBrC3S2O",
+    "userName": "dalai",
+    "callerContext": {
+        "awsSdkVersion": "aws-sdk-unknown",
+        "clientId": "57r9h35u0p97hnu4kgrrj63hhe"
+    },
+    "request": {
+        "userAttributes": {
+            "sub": "12345678-abcd-1234-abcd-123456789012",
+            "email": "gadalai426@gmail.com",
+            "email_verified": "true",
+            "custom:event_subscribed": "true"
+        },
+        "validationData": null,
+        "userNotFound": false
+    },
+    "response": {}
+}

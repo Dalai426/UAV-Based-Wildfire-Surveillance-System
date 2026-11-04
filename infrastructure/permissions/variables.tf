@@ -8,8 +8,8 @@ variable "s3_bucket_arn" {
   type        = string
 }
 
-variable "sqs_consume_policy_arn" {
-  description = "The Arn of Sqs Consume Policy for Lambda functions"
+variable "sns_policy_arn" {
+  description = "The Arn of SNS Policy for Lambda functions"
   type        = string
 }
 
