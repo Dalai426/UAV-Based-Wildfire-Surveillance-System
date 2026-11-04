@@ -15,17 +15,13 @@ Currently implemented:
 - automatic restart of the camera if the ground station is not reachable yet
 - automatic flight of the survey path in `sitl/flight.plan` on every start
 
-Encryption and running the drone on a Raspberry Pi 5 are planned but not implemented yet.
-
 ## Services
 
 ### SITL (flight controller)
 
 [ArduPilot](https://ardupilot.org) is the autopilot software used on real drones. SITL ("Software In The Loop") runs the same code on a normal computer, with a physics model instead of motors and sensors. To the ground station it looks exactly like a real drone.
 
-It:
-
-- simulates a quadcopter starting at `HOME_LOCATION`
+- simulates a quadcopter starting near Hareskovby, north-west of Copenhagen
 - runs MAVProxy, a small text-based ground station that forwards the telemetry
 - sends MAVLink to QGroundControl and to the Ground Station Core
 - receives commands back over the same connections (arm, take off, missions)
@@ -34,13 +30,11 @@ It:
 
 The image is built in two stages: a build stage compiles ArduPilot once, and a small runtime image keeps only the compiled simulator, `sim_vehicle.py` and MAVProxy. MAVProxy is installed without its window libraries (`--no-deps`), which saves about 1.2 GB.
 
-`fly_mission.py` does the automatic flight: it uploads `flight.plan` (a QGroundControl plan file), waits until the drone is ready (GPS and position estimate, about 40 seconds), arms it in AUTO mode and logs the progress. After landing it logs how long the flight took.
+`fly_mission.py` does the automatic flight: it uploads `flight.plan` (a QGroundControl plan file), waits until the drone is ready (GPS and position estimate, about 40 seconds), and arms it in AUTO mode. The drone then flies the mission by itself.
 
 ### Camera
 
 The simulated drone has no camera. The camera container fills that gap by running `stream_video.sh`.
-
-It:
 
 - plays a recorded drone video (f.e. `zenmuse.mp4`) in real time
 - re-encodes it like a drone's on-board encoder: constant 30 FPS, a keyframe (full picture) every second, low latency, capped bitrate (default 4 Mbit/s)
@@ -113,6 +107,7 @@ drone/
 │   ├── Dockerfile
 │   ├── flight.plan
 │   ├── fly_mission.py
+│   ├── mavic-battery.json
 │   └── start_sitl.sh
 ├── camera/
 │   ├── Dockerfile
@@ -277,18 +272,16 @@ Open QGroundControl. It connects by itself and shows the drone's position, the f
 The current development setup uses these values in `.env`:
 
 ```env
+GROUND_HOST=host.docker.internal
 STREAM_KEY=d7f3a91c
-VIDEO_DIR=./videos
 VIDEO_FILE=zenmuse.mp4
 BITRATE=4M
-HOME_LOCATION=55.7670,12.3830,40,0
 ```
 
+- `GROUND_HOST`: the computer running the ground station. `host.docker.internal` means the same computer as the drone; on the Raspberry Pi, use the ground station computer's IP address.
 - `STREAM_KEY`: must match `STREAM_KEY` in `edge/ground-station/.env`.
-- `VIDEO_DIR`: the folder with the videos; `./videos` is the `videos/` folder in `edge/drone` (also the default if it is not set).
-- `VIDEO_FILE`: the video to play, inside `VIDEO_DIR`.
+- `VIDEO_FILE`: the video to play, inside the `videos/` folder.
 - `BITRATE`: video bitrate; drone video links typically carry 2–8 Mbit/s.
-- `HOME_LOCATION`: latitude (55.7670), longitude (12.3830), altitude (40m), heading (0 degrees). The current values are near Hareskovby, north-west of Copenhagen.
 
 ## Known Issues
 
