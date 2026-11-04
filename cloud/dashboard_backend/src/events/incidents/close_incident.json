@@ -1,0 +1,13 @@
+{
+  "httpMethod": "POST",
+  "resource": "/incidents/{gs_event_id}/close",
+  "path": "/incidents/EVT-001/close",
+  "pathParameters": {
+    "gs_event_id": "EVT-001"
+  },
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"closed_by\": \"Operator Name\"}",
+  "isBase64Encoded": false
+}
