@@ -29,9 +29,9 @@ Resources:
     Properties:
       Description: Drone surveillance system Dashboard backend API
       StageName: prod
-      # Auth:
-      #   DefaultAuthorizer: AWS_IAM
-      #   InvokeRole: NONE
+      Auth:
+        DefaultAuthorizer: AWS_IAM
+        InvokeRole: NONE
       MethodSettings:
         - LoggingLevel: INFO
           DataTraceEnabled: true
