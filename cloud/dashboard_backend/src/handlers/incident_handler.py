@@ -10,8 +10,7 @@ async def list_incidents(data):
     pool = await get_db_pool()
     try:
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
+            rows = await conn.fetch("""
                 SELECT d.gs_event_id, d.detection_timestamp,
                        d.footage_duration, d.latitude, d.longitude,
                        d.status::text AS status, d.confidence_percent,
@@ -21,8 +20,7 @@ async def list_incidents(data):
                 FROM wildfire_detections d
                 LEFT JOIN incident_closures c ON c.gs_event_id = d.gs_event_id
                 ORDER BY d.detection_timestamp DESC
-                """
-            )
+                """)
     except asyncpg.PostgresError as exc:
         logger.error("PostgreSQL error while reading detections %s", exc)
         raise
@@ -59,6 +57,13 @@ async def close_incident(data):
     logger.info("Request Body: %s", data.get("body"))
     path = IncidentPath.model_validate(data.get("pathParameters") or {})
     body = json.loads(data.get("body") or "{}")
+    claims = data["requestContext"]["authorizer"]["claims"]
+    id_token_username = claims.get("cognito:username")
+
+    user_id = claims.get("sub")  # Store in database
+
+    logger.info(data["requestContext"]["authorizer"])
+    body["closed_by"] = id_token_username
     request = CloseIncident.model_validate(body)
     row = await closeIncident(path.gs_event_id, request)
     return {
@@ -67,8 +72,8 @@ async def close_incident(data):
             "gs_event_id": path.gs_event_id,
             "status": "closed",
             "closed_by": row["closed_by"],
-            "closed_at": row["closed_at"].isoformat()
-        }
+            "closed_at": row["closed_at"].isoformat(),
+        },
     }
 
 
@@ -80,7 +85,7 @@ async def closeIncident(gs_event_id, request: CloseIncident):
             async with conn.transaction():
                 status = await conn.fetchval(
                     "SELECT status::text FROM wildfire_detections WHERE gs_event_id = $1 FOR UPDATE",
-                    gs_event_id
+                    gs_event_id,
                 )
                 if status is None:
                     raise NotFoundError("Incident not found")
@@ -88,7 +93,7 @@ async def closeIncident(gs_event_id, request: CloseIncident):
                     raise ConflictError("Incident is already closed")
                 await conn.execute(
                     "UPDATE wildfire_detections SET status = 'closed' WHERE gs_event_id = $1",
-                    gs_event_id
+                    gs_event_id,
                 )
                 row = await conn.fetchrow(
                     """
@@ -97,7 +102,7 @@ async def closeIncident(gs_event_id, request: CloseIncident):
                     RETURNING closed_by, closed_at
                     """,
                     gs_event_id,
-                    request.closed_by
+                    request.closed_by,
                 )
                 return dict(row)
     except asyncpg.UniqueViolationError as exc:

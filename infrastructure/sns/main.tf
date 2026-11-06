@@ -17,7 +17,8 @@ resource "aws_iam_policy" "lambda_sns_publish" {
         Effect = "Allow"
         Action = [
           "sns:Publish",
-          "sns:Subscribe"
+          "sns:Subscribe",
+          "sns:GetSubscriptionAttributes"
         ]
         Resource = aws_sns_topic.user_notifications.arn
       }

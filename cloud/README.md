@@ -9,7 +9,7 @@ sam local invoke [function_name] --event [event_json]
 ```bash
 sam build
 sam local invoke gsBackendFunction --event ./events/alert/wildfire_alert_body.json --env-vars env.json 
-AWS_PROFILE=ce1-group-ds sam local invoke emailSubscriptionListener --event ./events/email_subscription/event_pre_auth.json --env-vars env.json 
+AWS_PROFILE=ce1-group-ds sam local invoke preAuthHandlers --event ./events/email_subscription/event_pre_auth.json --env-vars env.json 
 ```
 ### Commands for Testing API gateway
 ```bash
