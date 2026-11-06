@@ -83,7 +83,8 @@ resource "aws_iam_policy" "lambda_cognito_read" {
         Effect = "Allow"
         Action = [
           "cognito-idp:AdminGetUser",
-          "cognito-idp:ListUsers"
+          "cognito-idp:ListUsers",
+          "cognito-idp:AdminUpdateUserAttributes"
         ]
         Resource = "arn:aws:cognito-idp:eu-north-1:876875539928:userpool/eu-north-1_yiBrC3S2O"
       }

@@ -19,6 +19,8 @@ Parameters:
   DBPassword:
     Type: String
     NoEcho: True
+  UserPoolArn:
+    Type: String
   PrivateSubnetIds:
     Type: CommaDelimitedList
   LambdaSecurityGroupId:
@@ -30,15 +32,17 @@ Resources:
       Description: Drone surveillance system Dashboard backend API
       StageName: prod
       Auth:
-        DefaultAuthorizer: AWS_IAM
-        InvokeRole: NONE
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Ref UserPoolArn
       MethodSettings:
         - LoggingLevel: INFO
           DataTraceEnabled: true
           MetricsEnabled: true
           ResourcePath: "/*"
           HttpMethod: "*"
-  gsBackendFunction:
+  DashboardBackendFunction:
     Type: AWS::Serverless::Function
     Properties:
       Environment:
