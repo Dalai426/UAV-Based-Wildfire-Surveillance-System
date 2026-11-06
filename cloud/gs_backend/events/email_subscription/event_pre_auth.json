@@ -1,22 +1,27 @@
 {
-    "version": "1",
-    "triggerSource": "PreAuthentication_Authentication",
-    "region": "eu-north-1",
-    "userPoolId": "eu-north-1_yiBrC3S2O",
-    "userName": "dalai",
-    "callerContext": {
-        "awsSdkVersion": "aws-sdk-unknown",
-        "clientId": "57r9h35u0p97hnu4kgrrj63hhe"
-    },
-    "request": {
-        "userAttributes": {
-            "sub": "12345678-abcd-1234-abcd-123456789012",
-            "email": "gadalai426@gmail.com",
-            "email_verified": "true",
-            "custom:event_subscribed": "true"
+        "version": "1",
+        "region": "eu-north-1",
+        "userPoolId": "eu-north-1_yiBrC3S2O",
+        "userName": "dalai",
+        "callerContext": {
+            "awsSdkVersion": "aws-sdk-js-3.1160.0",
+            "clientId": "57r9h35u0p97hnu4kgrrj63hhe"
         },
-        "validationData": null,
-        "userNotFound": false
-    },
-    "response": {}
-}
+        "triggerSource": "PreAuthentication_Authentication",
+        "request": {
+            "userAttributes": {
+                "sub": "70fc697c-f031-703a-088e-b44aaa9a3bc4",
+                "custom:email_sub_arn": "arn:aws:sns:eu-north-1:876875539928:drone-surveillance-system-user-notifications:b928caf1-bed9-468f-a1da-fcfd91dfa7bb",
+                "email_verified": "true",
+                "address": "hello",
+                "cognito:user_status": "CONFIRMED",
+                "profile": "hello",
+                "name": "hello",
+                "email": "gadalai426@gmail.com",
+                "custom:event_subscribed": "pending"
+            },
+            "validationData": null,
+            "userNotFound": false
+        },
+        "response": {}
+    }
