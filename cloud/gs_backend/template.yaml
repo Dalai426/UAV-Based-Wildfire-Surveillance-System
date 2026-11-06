@@ -96,14 +96,15 @@ Resources:
             Method: post
     Metadata:
       BuildMethod: python3.13
-  emailSubscriptionListener:
+  # Temporary Solution Because We Are Using SNS
+  preAuthHandlers:
     Type: AWS::Serverless::Function
     Properties:
       Environment:
         Variables:
           SNS_TOPIC_ARN:
             Ref: SnsTopicArn
-      CodeUri: email_subscription/
+      CodeUri: pre_auth_handlers/
       Handler: app.handler
       Layers:
         - Ref: SharedLayer
@@ -121,7 +122,7 @@ Resources:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !Ref emailSubscriptionListener
+      FunctionName: !Ref preAuthHandlers
       Principal: cognito-idp.amazonaws.com
       SourceArn: !Ref UserPoolArn
 Outputs:
