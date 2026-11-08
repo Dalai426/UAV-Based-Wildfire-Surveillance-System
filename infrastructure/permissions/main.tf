@@ -158,9 +158,17 @@ resource "aws_iam_role_policy" "iot_s3_access" {
       {
         Effect = "Allow"
         Action = [
-          "s3:PutObject"
+          "s3:PutObject",
+          "s3:GetObject"
         ]
-        Resource = "${var.s3_bucket_arn}"
+        Resource = "${var.s3_bucket_arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = var.s3_bucket_arn
       },
       {
         Effect = "Allow"
