@@ -17,6 +17,7 @@ def subscribe_email(email):
         ReturnSubscriptionArn=True,
     )
     logger.info(response)
+
     logger.info("Subscription requested: %s", response)
     return response["SubscriptionArn"]
 
