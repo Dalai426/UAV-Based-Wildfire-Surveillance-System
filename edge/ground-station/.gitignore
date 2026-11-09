@@ -6,3 +6,5 @@ data/
 
 # Test videos / generated media
 videos/*.mp4
+
+edge/ground-station/inference-service/__pycache__/
