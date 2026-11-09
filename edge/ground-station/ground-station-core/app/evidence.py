@@ -5,7 +5,7 @@ from pathlib import Path
 
 import httpx
 
-from app.schemas import CreateEvidence, Evidence
+from app.models.evidence import CreateEvidence, Evidence
 
 
 # Internal MediaMTX playback API URL.

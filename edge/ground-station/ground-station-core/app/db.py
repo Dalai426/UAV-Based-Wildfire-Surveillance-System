@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
-from app.schemas import CreateEvidence, Evidence
+from app.models.evidence import CreateEvidence, Evidence
 
 
 # Location of the SQLite database inside the container.
@@ -47,7 +47,18 @@ def init_db():
                 drone_id TEXT NOT NULL,
 
                 -- When the event was first created locally.
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+
+                -- Complete validated DetectionEvent JSON.
+                cloud_payload_json TEXT NOT NULL,
+
+                -- Cloud delivery state.
+                cloud_status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (cloud_status IN ('pending', 'sent')),
+                cloud_attempts INTEGER NOT NULL DEFAULT 0,
+                cloud_next_attempt_at TEXT,
+                cloud_last_error TEXT,
+                cloud_sent_at TEXT
             )
             """
         )
@@ -62,8 +73,8 @@ def init_db():
                 requested_start TEXT NOT NULL,
                 requested_end TEXT NOT NULL,
 
-                -- PENDING / READY / FAILED.
-                creation_status TEXT NOT NULL DEFAULT 'PENDING',
+                -- pending / ready / failed.
+                creation_status TEXT NOT NULL DEFAULT 'pending',
                 
                 relative_path TEXT,
 
@@ -72,8 +83,15 @@ def init_db():
 
                 -- File size, useful later for uploads/storage.
                 size_bytes INTEGER,
-                
-                created_at TEXT NOT NULL
+
+                created_at TEXT NOT NULL,
+
+                cloud_status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (cloud_status IN ('pending', 'sent')),
+                cloud_attempts INTEGER NOT NULL DEFAULT 0,
+                cloud_next_attempt_at TEXT,
+                cloud_last_error TEXT,
+                cloud_sent_at TEXT
             )
             """
         )
@@ -81,7 +99,8 @@ def init_db():
 
 def insert_event(
     event_id: str,
-    drone_id: str
+    drone_id: str,
+    cloud_payload_json: str,
 ):
     """
     Persist an event before attempting evidence generation.
@@ -96,14 +115,16 @@ def insert_event(
             INSERT INTO events (
                 event_id,
                 drone_id,
-                created_at
+                created_at,
+                cloud_payload_json
             )
-            VALUES (?, ?, ?)
+            VALUES (?, ?, ?, ?)
             """,
             (
                 event_id,
                 drone_id,
                 datetime.now(timezone.utc).isoformat(),
+                cloud_payload_json,
             ),
         )
 
@@ -177,7 +198,7 @@ def mark_evidence_ready(evidence: Evidence):
         db.execute(
             """
             UPDATE evidence
-            SET creation_status = 'READY',
+            SET creation_status = 'ready',
                 relative_path = ?,
                 sha256 = ?,
                 size_bytes = ?
@@ -200,7 +221,7 @@ def mark_evidence_failed(evidence_id: str):
         db.execute(
             """
             UPDATE evidence
-            SET creation_status = 'FAILED'
+            SET creation_status = 'failed'
             WHERE evidence_id = ?
             """,
             (evidence_id,),

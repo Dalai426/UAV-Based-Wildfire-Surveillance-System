@@ -85,4 +85,31 @@ services:
       # internal network, like a real drone would.
       - "14551:14551/udp"
 
+  cloud-sync:
+    build:
+      context: ./cloud-sync
+    restart: unless-stopped
+
+    environment:
+      CLOUD_API_BASE_URL: ${CLOUD_API_BASE_URL}
+      AWS_REGION: ${AWS_REGION}
+      IOT_CREDENTIALS_ENDPOINT: ${IOT_CREDENTIALS_ENDPOINT}
+      IOT_ROLE_ALIAS: ${IOT_ROLE_ALIAS}
+      IOT_CERT_PATH: /certs/certificate.pem.crt
+      IOT_KEY_PATH: /certs/private.pem.key
+      IOT_CA_PATH: /certs/AmazonRootCA1.pem
+
+      DATABASE_PATH: /data/database/ground-station.db
+      EVIDENCE_DIR: /data/evidence
+
+      CLOUD_S3_BUCKET: ${CLOUD_S3_BUCKET}
+
+    volumes:
+      # Read pending events and write delivery state.
+      - ./data/database:/data/database
+      - ./data/evidence:/data/evidence:ro
+
+      # Read authentication files from the host.
+      - ${CLOUD_CERTS_DIR:?Set CLOUD_CERTS_DIR in .env with an absolute path to the local certificate directory}:/certs:ro
+
       
