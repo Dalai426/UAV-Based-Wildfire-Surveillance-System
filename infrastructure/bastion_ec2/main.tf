@@ -13,6 +13,7 @@ resource "aws_security_group" "bastion" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
+    // we can replace it by our machines' IP address cidr blocks.
     cidr_blocks = ["0.0.0.0/0"]
   }
 
