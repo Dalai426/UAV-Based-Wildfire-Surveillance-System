@@ -3,13 +3,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class CreateEventRequest(BaseModel):
-    """Create a test event and request its first evidence interval."""
-
-    start: datetime
-    end: datetime
-
-
 class CreateEvidence(BaseModel):
     """Source and interval needed before an evidence file exists."""
 

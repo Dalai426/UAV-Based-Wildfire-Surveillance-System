@@ -1,6 +1,7 @@
 import asyncio
 import os
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -20,7 +21,12 @@ from app.db import (
 )
 
 from app.evidence import create_evidence
-from app.schemas import CreateEventRequest, CreateEvidence, Evidence
+
+from app.models.evidence import CreateEvidence, Evidence
+from app.models.events import (
+    CreateEventRequest,
+    DetectionEvent
+)
 
 from app.telemetry import TelemetryState, run_telemetry_forever
 
@@ -40,6 +46,23 @@ STREAM_KEY = os.environ["STREAM_KEY"]
 
 # Maximum requested interval for event evidence, in seconds.
 MAX_EVENT_EVIDENCE_SECONDS = 20
+
+# Temporary detection values for manual testing.
+TEST_EVENT_VALUES = {
+    "ground_station_id": "test-ground-station",
+    "ground_station": {},
+    "confidence_percent": 95.0,
+    "status": "detected",
+    "coordinates": {
+        "longitude": 9.92,
+        "latitude": 57.05,
+    },
+    "drone": {
+        "speed": 0.0,
+        "altitude": 50.0,
+        "battery_status": "100%",
+    },
+}
 
 
 # Latest telemetry from the drone.
@@ -97,7 +120,7 @@ async def save_evidence(request: CreateEvidence) -> Evidence:
         # and metadata. Returns a completed Evidence model.
         evidence = await create_evidence(request)
 
-        # Store the file details and mark this evidence READY.
+        # Store the file details and mark this evidence ready.
         mark_evidence_ready(evidence)
         return evidence
 
@@ -175,15 +198,21 @@ async def create_event(
     event_id = str(uuid.uuid4())
     evidence_id = str(uuid.uuid4())
 
-    # IMPORTANT:
-    #
     # Persist the event before attempting evidence creation.
-    #
     # If MediaMTX or evidence creation fails, the event is
     # still known and can be retried with the same event_id.
+    cloud_event = DetectionEvent.model_validate({
+        **TEST_EVENT_VALUES,
+        "event_id": event_id,
+        "drone_id": DRONE_ID,
+        "detection_time": datetime.now(timezone.utc),
+        "footage_duration": duration,
+    })
+
     insert_event(
         event_id=event_id,
         drone_id=DRONE_ID,
+        cloud_payload_json=cloud_event.model_dump_json()
     )
 
     # Save the pending evidence record.
@@ -204,7 +233,7 @@ async def create_event(
 
     return {
         "event_id": event_id,
-        "status": "READY",
+        "status": "ready",
         "evidence": evidence,
     }
 
@@ -237,7 +266,7 @@ async def retry_evidence(evidence_id: str):
 
     return {
         "event_id": evidence.event_id,
-        "status": "READY",
+        "status": "ready",
         "evidence": evidence,
     }
 
