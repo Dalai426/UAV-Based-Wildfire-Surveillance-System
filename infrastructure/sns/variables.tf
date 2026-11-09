@@ -3,8 +3,8 @@ variable "project_name" {
   type        = string
 }
 
-variable "network_cidr_block" {
-  description = "the CIDR block of the VPC"
+variable "lambda_security_group_id" {
+  description = "The Security Group ID of Lambda functions"
   type        = string
 }
 

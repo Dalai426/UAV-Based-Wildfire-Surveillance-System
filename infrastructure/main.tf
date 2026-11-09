@@ -54,10 +54,10 @@ module "storage" {
 module "sns" {
   source = "./sns"
   // variables
-  project_name = var.project_name
-  vpc_id = module.network.vpc_id
-  private_subnets=module.network.private_subnet_ids
-  network_cidr_block=module.network.cidr_block
+  project_name             = var.project_name
+  vpc_id                   = module.network.vpc_id
+  private_subnets          = module.network.private_subnet_ids
+  lambda_security_group_id = module.network.lambda_security_group
 }
 
 module "permissions" {

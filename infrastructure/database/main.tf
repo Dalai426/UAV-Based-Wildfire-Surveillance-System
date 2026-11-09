@@ -24,16 +24,17 @@ resource "aws_security_group" "postgres" {
   }
 }
 
-# Connecting the bastion with db
-resource "aws_vpc_security_group_ingress_rule" "postgres_from_bastion" {
-  security_group_id            = aws_security_group.postgres.id
-  referenced_security_group_id = var.bastion_security_group_id
+# It is useful when the ingress rule of postgre does not allow all traffic from the entire VPC
+# # Connecting the bastion with db
+# resource "aws_vpc_security_group_ingress_rule" "postgres_from_bastion" {
+#   security_group_id            = aws_security_group.postgres.id
+#   referenced_security_group_id = var.bastion_security_group_id
 
-  description = "Allow PostgreSQL access from bastion"
-  ip_protocol = "tcp"
-  from_port   = 5432
-  to_port     = 5432
-}
+#   description = "Allow PostgreSQL access from bastion"
+#   ip_protocol = "tcp"
+#   from_port   = 5432
+#   to_port     = 5432
+# }
 
 resource "aws_db_subnet_group" "postgres" {
   name       = "${var.db_name}-subnets"
