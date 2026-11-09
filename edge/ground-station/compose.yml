@@ -88,6 +88,9 @@ services:
     environment:
       RTSP_URL: ${RTSP_URL:-rtsp://media-server:8554/d7f3a91c}
       MODEL_WEIGHTS_PATH: /models/mobilenet_v2_flame3.pth
+      STREAM_KEY: ${STREAM_KEY}
+      DRONE_ID: ${DRONE_ID}
+
 
     volumes:
       - ./models:/models:ro
