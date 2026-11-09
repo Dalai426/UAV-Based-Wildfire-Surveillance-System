@@ -22,3 +22,6 @@ gs_certificates/
 *.pem
 *.key
 *.cert
+
+__pycache__/
+__pycache__/*
