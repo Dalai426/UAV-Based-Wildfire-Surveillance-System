@@ -1,0 +1,4 @@
+httpx
+botocore
+pydantic
+boto3

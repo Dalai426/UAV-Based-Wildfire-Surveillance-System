@@ -7,3 +7,10 @@ uvicorn[standard]
 # Async HTTP client.
 # Used by Core to call the MediaMTX playback API.
 httpx
+
+# MAVLink library for talking to the drone.
+# Used by Core to receive the drone's telemetry.
+mavsdk>=4,<5
+
+# Validates and structures data using Python type hints.
+pydantic

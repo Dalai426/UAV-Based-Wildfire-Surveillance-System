@@ -17,3 +17,8 @@ output "db_endpoint" {
   value       = module.database.db_endpoint
   description = "The Database Endpoint"
 }
+
+output "sns_topic_arn" {
+  value       = module.sns.sns_topic_arn
+  description = "The SNS Topic ARN"
+}

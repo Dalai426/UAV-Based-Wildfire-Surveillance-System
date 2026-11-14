@@ -12,27 +12,81 @@ Globals:
 Parameters:
   DashboardBackendLambdaFunctionsRoleArn:
     Type: String
+  DBHost:
+    Type: String
+  DBUser:
+    Type: String
+  DBPassword:
+    Type: String
+    NoEcho: True
+  UserPoolArn:
+    Type: String
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+  LambdaSecurityGroupId:
+    Type: String
 Resources:
   DashboardBackendApi:
     Type: AWS::Serverless::Api
     Properties:
+      Description: Drone surveillance system Dashboard backend API
       StageName: prod
-  # gsBackendFunction:
-  #   Type: AWS::Serverless::Function
-  #   Properties:
-  #     CodeUri: gs_backend/
-  #     Handler: app.handler
-  #     Runtime: python3.13
-  #     Architectures:
-  #       - x86_64
-  #     Events:
-  #       SendAlertData:
-  #         Type: Api
-  #         Properties:
-  #           RestApiId:
-  #             Ref: GsBackendApi
-  #           Path: /ground-station/alert
-  #           Method: post
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Ref UserPoolArn
+      MethodSettings:
+        - LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+          ResourcePath: "/*"
+          HttpMethod: "*"
+  DashboardBackendFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          DB_HOST:
+            Ref: DBHost
+          DB_NAME: wf_detection
+          DB_USER:
+            Ref: DBUser
+          DB_PASSWORD:
+            Ref: DBPassword
+          DB_PORT: "5432"
+      CodeUri: src/
+      Handler: app.handler
+      Role:
+        Ref: DashboardBackendLambdaFunctionsRoleArn
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      VpcConfig:
+        SecurityGroupIds:
+          - Ref: LambdaSecurityGroupId
+        SubnetIds:
+          Ref: PrivateSubnetIds
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: "/drone-surveillance-system/dashboard/logs"
+      Events:
+        ListIncidents:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: DashboardBackendApi
+            Path: /incidents
+            Method: get
+        CloseIncident:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: DashboardBackendApi
+            Path: /incidents/{gs_event_id}/close
+            Method: post
+    Metadata:
+      BuildMethod: python3.13
 Outputs:
   DashboardBackendUrl:
     Description: Dashboard API Gateway URL

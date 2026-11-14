@@ -8,3 +8,5 @@ data/
 videos/*.mp4
 
 edge/ground-station/inference-service/__pycache__/*
+# Docker Compose development configuration
+compose.dev.yml

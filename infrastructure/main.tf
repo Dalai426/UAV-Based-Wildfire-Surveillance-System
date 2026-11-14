@@ -51,16 +51,26 @@ module "storage" {
   s3_bucket_name = local.s3_bucket_name
 }
 
+module "sns" {
+  source = "./sns"
+  // variables
+  project_name             = var.project_name
+  vpc_id                   = module.network.vpc_id
+  private_subnets          = module.network.private_subnet_ids
+  lambda_security_group_id = module.network.lambda_security_group
+}
+
 module "permissions" {
   source = "./permissions"
   // variables
   project_name                 = var.project_name
   s3_bucket_arn                = module.storage.bucket_arn
   gs_backend_api_execution_arn = "arn:aws:execute-api:eu-north-1:876875539928:3bs1n2thya/prod"
+  sns_policy_arn               = module.sns.sns_role_policy_arn
   permissions_for_lambda = {
     "gsBackend" = {
       log_group_arn = module.monitoring.log_group_gs_arn
-    }
+    },
     "dashboardBackend" = {
       log_group_arn = module.monitoring.log_group_dashboard_arn
     }

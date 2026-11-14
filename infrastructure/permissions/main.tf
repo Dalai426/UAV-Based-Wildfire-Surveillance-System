@@ -1,9 +1,7 @@
 # The Role for Lambda Functions.
 resource "aws_iam_role" "lambda_role" {
-
   for_each = var.permissions_for_lambda
-
-  name = "${var.project_name}-${each.key}-lambda-role"
+  name     = "${var.project_name}-${each.key}-lambda-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -18,6 +16,7 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
+# The Lambda Role's Policy for VPC Access.
 resource "aws_iam_policy" "lambda_vpc_access" {
   name        = "${var.project_name}-lambda-vpc-access"
   description = "Allow Lambda to manage network interfaces for VPC access"
@@ -43,6 +42,7 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
   policy_arn = aws_iam_policy.lambda_vpc_access.arn
 }
 
+# The Lambda Role's Policy for Logging.
 resource "aws_iam_policy" "lambda_logging" {
   for_each    = var.permissions_for_lambda
   name        = "${var.project_name}-${each.key}-lambda-logging"
@@ -65,11 +65,44 @@ resource "aws_iam_role_policy_attachment" "lambda_logging" {
   role       = aws_iam_role.lambda_role[each.key].name
   policy_arn = aws_iam_policy.lambda_logging[each.key].arn
 }
+
+# Attaching SNS policy to Lambda role
+resource "aws_iam_role_policy_attachment" "lambda_sns_publish" {
+  for_each   = var.permissions_for_lambda
+  role       = aws_iam_role.lambda_role[each.key].name
+  policy_arn = var.sns_policy_arn
+}
+
+# The Role for reading users from cognito
+resource "aws_iam_policy" "lambda_cognito_read" {
+  name = "${var.project_name}-lambda-cognito-read"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:ListUsers",
+          "cognito-idp:AdminUpdateUserAttributes"
+        ]
+        Resource = "arn:aws:cognito-idp:eu-north-1:876875539928:userpool/eu-north-1_yiBrC3S2O"
+      }
+    ]
+  })
+}
+resource "aws_iam_role_policy_attachment" "read_from_cognito" {
+  role       = aws_iam_role.lambda_role["dashboardBackend"].name
+  policy_arn = aws_iam_policy.lambda_cognito_read.arn
+}
+
+# The Lambda Role's Policy for Basic Execution.
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   for_each   = var.permissions_for_lambda
   role       = aws_iam_role.lambda_role[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
+
 # The Role for API Gateway to write logs to CloudWatch
 resource "aws_iam_role" "api_gateway_cloudwatch" {
   name = "${var.project_name}-api-gateway-cloudwatch-role"
@@ -125,9 +158,17 @@ resource "aws_iam_role_policy" "iot_s3_access" {
       {
         Effect = "Allow"
         Action = [
-          "s3:PutObject"
+          "s3:PutObject",
+          "s3:GetObject"
         ]
-        Resource = "${var.s3_bucket_arn}"
+        Resource = "${var.s3_bucket_arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = var.s3_bucket_arn
       },
       {
         Effect = "Allow"
@@ -166,4 +207,26 @@ resource "aws_iot_policy" "iot_credential_policy" {
 
 data "aws_iot_endpoint" "credential_provider" {
   endpoint_type = "iot:CredentialProvider"
+}
+
+# Optional: If we use SES, we can use it.
+resource "aws_iam_policy" "lambda_ses_access" {
+  name        = "${var.project_name}-lambda-ses-access"
+  description = "Allow Lambda to send emails using Amazon SES"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ses:SendEmail"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_ses_access" {
+  role       = aws_iam_role.lambda_role["gsBackend"].name
+  policy_arn = aws_iam_policy.lambda_ses_access.arn
 }

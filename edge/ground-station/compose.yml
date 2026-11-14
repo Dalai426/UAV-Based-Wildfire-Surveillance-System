@@ -64,6 +64,9 @@ services:
       EVIDENCE_DIR: /data/evidence
       DATABASE_PATH: /data/database/ground-station.db
 
+      # Where Core listens for the drone's MAVLink telemetry.
+      TELEMETRY_CONNECTION_URL: udpin://0.0.0.0:14551
+
     volumes:
       # Final evidence clips and metadata.
       - ./data/evidence:/data/evidence
@@ -75,22 +78,38 @@ services:
       # Ground Station Core API.
       - "8080:8080"
 
-  # CPU-based wildfire inference service.
-  inference-service:
-    build:
-      context: ./inference-service
+      # Drone telemetry (MAVLink).
+      #
+      # UDP, not TCP: "/udp" is required, Docker maps TCP otherwise.
+      # The drone sends its telemetry here, from outside Docker's
+      # internal network, like a real drone would.
+      - "14551:14551/udp"
 
+  cloud-sync:
+    build:
+      context: ./cloud-sync
     restart: unless-stopped
 
-    depends_on:
-      - media-server
-
     environment:
-      RTSP_URL: ${RTSP_URL:-rtsp://media-server:8554/d7f3a91c}
-      MODEL_WEIGHTS_PATH: /models/mobilenet_v2_flame3.pth
-      STREAM_KEY: ${STREAM_KEY}
-      DRONE_ID: ${DRONE_ID}
+      CLOUD_API_BASE_URL: ${CLOUD_API_BASE_URL}
+      AWS_REGION: ${AWS_REGION}
+      IOT_CREDENTIALS_ENDPOINT: ${IOT_CREDENTIALS_ENDPOINT}
+      IOT_ROLE_ALIAS: ${IOT_ROLE_ALIAS}
+      IOT_CERT_PATH: /certs/certificate.pem.crt
+      IOT_KEY_PATH: /certs/private.pem.key
+      IOT_CA_PATH: /certs/AmazonRootCA1.pem
 
+      DATABASE_PATH: /data/database/ground-station.db
+      EVIDENCE_DIR: /data/evidence
+
+      CLOUD_S3_BUCKET: ${CLOUD_S3_BUCKET}
 
     volumes:
-      - ./models:/models:ro
+      # Read pending events and write delivery state.
+      - ./data/database:/data/database
+      - ./data/evidence:/data/evidence:ro
+
+      # Read authentication files from the host.
+      - ${CLOUD_CERTS_DIR:?Set CLOUD_CERTS_DIR in .env with an absolute path to the local certificate directory}:/certs:ro
+
+      

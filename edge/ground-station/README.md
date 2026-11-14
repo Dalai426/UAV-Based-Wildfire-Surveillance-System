@@ -16,8 +16,12 @@ Currently implemented:
 - evidence extraction from recorded video
 - evidence metadata and SHA-256 hashing
 - reuse of completed evidence on retries
+- live drone telemetry over MAVLink (UDP 14551)
+- cloud event delivery with persisted retries
+- S3 evidence uploads with checksum verification
+- shared temporary AWS credentials through AWS IoT
 
-AI inference, drone telemetry/authentication, and cloud synchronization are planned but not implemented yet.
+AI inference and drone authentication are planned but not implemented yet.
 
 ## Services
 
@@ -49,10 +53,22 @@ It currently:
 - creates evidence metadata
 - calculates a SHA-256 integrity hash
 - supports evidence retries using the same evidence ID
+- receives the drone's telemetry (position, altitude, speed, attitude, battery, flight mode) on UDP 14551 and serves the latest values at `GET /telemetry/latest`
 
 The current `/events` endpoint is used manually for testing. Later, events will be triggered by the detection pipeline.
 
 Each request currently creates one event and one evidence record. The database relationship supports multiple evidence records per event, but additional-clip creation and event association logic are not implemented.
+
+### Cloud Sync
+
+Cloud Sync delivers stored events to the cloud API and uploads completed
+evidence videos to S3.
+
+Separate workers process events and evidence independently. Both use SQLite
+to track delivery attempts and retries, and share temporary AWS credentials
+obtained through AWS IoT.
+
+See [Cloud Sync](cloud-sync/README.md) for implementation details.
 
 ## Local Storage
 
@@ -118,7 +134,7 @@ data/database/ground-station.db
 The database has two tables:
 
 - `events`: event ID, initial detecting drone ID, and local creation time (`created_at`). This timestamp is when the event is saved, not a separate detection timestamp.
-- `evidence`: evidence ID, parent event ID, source drone and stream, requested interval, creation status (`PENDING`, `READY`, or `FAILED`), file path, hash, size, and creation time.
+- `evidence`: evidence ID, parent event ID, source drone and stream, requested interval, creation status (`pending`, `ready`, or `failed`), file path, hash, size, and creation time.
 
 The event is committed independently before the pending evidence record is inserted. An evidence failure does not roll back the event. Retries load the original evidence inputs and reuse its `evidence_id`.
 
@@ -135,7 +151,7 @@ Generate event_id and evidence_id
     ↓
 Save event to SQLite
     ↓
-Save separate PENDING evidence record
+Save separate pending evidence record
     ↓
 Request recorded interval from Media Server
     ↓
@@ -147,10 +163,10 @@ Move to final evidence directory
     ↓
 Write metadata.json
     ↓
-Mark evidence READY
+Mark evidence ready
 ```
 
-Handled HTTP, filesystem, and metadata-validation failures mark evidence `FAILED` and return both IDs. The event remains saved. Database failures and process interruptions may prevent status updates.
+Handled HTTP, filesystem, and metadata-validation failures mark evidence `failed` and return both IDs. The event remains saved. Database failures and process interruptions may prevent status updates.
 
 Completed evidence is reused when both the video and valid metadata exist. Retries do not recalculate the stored hash. Simultaneous creation/retry requests for the same evidence are not yet protected against conflicts.
 
@@ -170,7 +186,8 @@ ground-station/
 │       ├── main.py
 │       ├── db.py
 │       ├── evidence.py
-│       └── schemas.py
+│       ├── schemas.py
+│       └── telemetry.py
 ├── data/
 │   ├── recordings/
 │   ├── evidence/
@@ -228,6 +245,8 @@ ffmpeg \
 
 The stream key must match the configured `STREAM_KEY`.
 
+The virtual drone's camera (`edge/drone`) publishes to the same path. Use either this test video or the drone camera, not both.
+
 ### 2. Check that recordings are being created
 
 ```bash
@@ -279,7 +298,7 @@ A successful request returns:
 ```json
 {
   "event_id": "...",
-  "status": "READY",
+  "status": "ready",
   "evidence": {
     "evidence_id": "...",
     "event_id": "...",
@@ -294,7 +313,7 @@ A successful request returns:
 }
 ```
 
-The request waits for evidence creation. It can return an error even though the event was successfully saved; `READY` in the response refers to evidence completion, not a fire lifecycle state.
+The request waits for evidence creation. It can return an error even though the event was successfully saved; `ready` in the response refers to evidence completion, not a fire lifecycle state.
 
 ### 6. Check the generated evidence
 
@@ -342,7 +361,7 @@ Stop the Media Server, then submit an event request using a known recorded inter
 docker compose stop media-server
 ```
 
-Expect `502` with `event_id` and `evidence_id` inside `detail`. Read the event to confirm it remains saved and the evidence is `FAILED`.
+Expect `502` with `event_id` and `evidence_id` inside `detail`. Read the event to confirm it remains saved and the evidence is `failed`.
 
 Restart MediaMTX and retry the failed evidence:
 
@@ -354,6 +373,16 @@ curl -X POST http://localhost:8080/evidence/<evidence_id>/retry
 The requested footage must still exist within recording retention. Restart the FFmpeg publisher if it exited when MediaMTX stopped; new recording resumes once publishing resumes.
 
 Also check invalid requests: missing timezone, reversed/equal timestamps, and intervals above the limit should return `400`; missing fields or unparseable timestamps should return `422`.
+
+### 10. Check the drone telemetry
+
+Start the virtual drone (please see `edge/drone/README.md` before this step), then:
+
+```bash
+curl http://localhost:8080/telemetry/latest
+```
+
+Everything you need to know is explained in `edge/drone/README.md`.
 
 ## Development Configuration
 
@@ -375,9 +404,8 @@ Media recording behavior, retention, and related media settings are configured s
 Planned additions include:
 
 - AI inference from the live video stream
-- drone telemetry and timestamp correlation
+- timestamp correlation between video frames and telemetry
 - drone/session authentication
-- cloud synchronization
 - production transport and storage security
 
 These will be added incrementally as the local ground-station pipeline is completed and tested.

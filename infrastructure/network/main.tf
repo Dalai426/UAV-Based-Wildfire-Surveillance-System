@@ -36,7 +36,7 @@ resource "aws_security_group" "lambda" {
   name        = "lambda-security-group"
   description = "Security group for Lambda functions"
   vpc_id      = module.vpc.vpc_id
-
+  
   # The egress manages outgoing traffic
   # It allows lambda functions to connect IP addresses in VPC
   egress {

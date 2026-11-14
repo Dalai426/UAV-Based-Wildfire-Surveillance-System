@@ -1,0 +1,14 @@
+# Generic 3 kg ArduPilot quad with the battery drain of a DJI Mavic Air
+{
+    # Mavic Air battery: 2375 mAh, 3 cells
+    "battCapacityAh" : 2.375,
+
+    # voltage when fully charged
+    "maxVoltage" : 13.2,
+
+    # nominal voltage (DJI spec)
+    "refVoltage" : 11.55,
+
+    # motors hover current
+    "refCurrent" : 7.1
+}

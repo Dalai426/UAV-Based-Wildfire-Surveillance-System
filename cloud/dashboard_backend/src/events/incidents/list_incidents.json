@@ -1,0 +1,8 @@
+{
+  "httpMethod": "GET",
+  "resource": "/incidents",
+  "path": "/incidents",
+  "headers": {},
+  "body": null,
+  "isBase64Encoded": false
+}

@@ -12,6 +12,10 @@ Globals:
 Parameters:
   CloudBackendLambdaFunctionsRoleArn:
     Type: String
+  DashboardBackendLambdaFunctionsRoleArn:
+    Type: String
+  SnsTopicArn:
+    Type: String
   DBHost:
     Type: String
   DBUser:
@@ -19,11 +23,23 @@ Parameters:
   DBPassword:
     Type: String
     NoEcho: True
+  UserPoolArn:
+    Type: String
   PrivateSubnetIds:
     Type: CommaDelimitedList
   LambdaSecurityGroupId:
     Type: String
 Resources:
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: drone-shared-layer
+      Description: Shared utilities for Drone Surveillance System
+      ContentUri: shared/
+      CompatibleRuntimes:
+        - python3.13
+    Metadata:
+      BuildMethod: python3.13
   GsBackendApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -51,8 +67,12 @@ Resources:
           DB_PASSWORD:
             Ref: DBPassword
           DB_PORT: "5432"
+          SNS_TOPIC_ARN:
+            Ref: SnsTopicArn
       CodeUri: src/
       Handler: app.handler
+      Layers:
+        - Ref: SharedLayer
       Role:
         Ref: CloudBackendLambdaFunctionsRoleArn
       Runtime: python3.13
@@ -76,7 +96,35 @@ Resources:
             Method: post
     Metadata:
       BuildMethod: python3.13
-
+  # Temporary Solution Because We Are Using SNS
+  preAuthHandlers:
+    Type: AWS::Serverless::Function
+    Properties:
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN:
+            Ref: SnsTopicArn
+      CodeUri: pre_auth_handlers/
+      Handler: app.handler
+      Layers:
+        - Ref: SharedLayer
+      Role:
+        Ref: DashboardBackendLambdaFunctionsRoleArn
+      Runtime: python3.13
+      Architectures:
+        - x86_64
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: "/drone-surveillance-system/dashboard/logs"
+    Metadata:
+      BuildMethod: python3.13
+  CognitoEmailSenderFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref preAuthHandlers
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !Ref UserPoolArn
 Outputs:
   CloudBackendUrl:
     Description: API Gateway URL

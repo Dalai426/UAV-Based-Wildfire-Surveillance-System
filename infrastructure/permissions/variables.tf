@@ -8,6 +8,11 @@ variable "s3_bucket_arn" {
   type        = string
 }
 
+variable "sns_policy_arn" {
+  description = "The Arn of SNS Policy for Lambda functions"
+  type        = string
+}
+
 variable "permissions_for_lambda" {
   description = "Permissions for Lambda functions"
   type = map(object({
@@ -17,10 +22,5 @@ variable "permissions_for_lambda" {
 
 variable "gs_backend_api_execution_arn" {
   description = "GS Backend API Gateway execution ARN"
-  type        = string
-}
-
-variable "gs_backend_lambda_arn" {
-  description = "GS Backend Lambda Invocation ARN"
   type        = string
 }

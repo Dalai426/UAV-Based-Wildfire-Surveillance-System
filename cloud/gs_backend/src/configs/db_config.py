@@ -1,6 +1,6 @@
 
 
-from configs.logger_config import logger
+from shared_configs.logger_config import logger
 import os
 import asyncpg
 
