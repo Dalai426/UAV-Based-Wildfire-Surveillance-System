@@ -13,9 +13,6 @@ print("url: ", URL, flush=True)
 
 cap = cv2.VideoCapture(URL)
 
-streamFps = cap.get(cv2.CAP_PROP_FPS)
-TARGET_FPS = 5
-
 while not cap.isOpened():
     print("Could not open video stream. Retrying in 5 seconds")
     time.sleep(5)
@@ -23,20 +20,50 @@ while not cap.isOpened():
 
 net = CustomModel(weights_path=os.environ["MODEL_WEIGHTS_PATH"])
 
+streamFps = cap.get(cv2.CAP_PROP_FPS)
+TARGET_FPS = 5
+MAX_SKIPPED_FRAMES = 10
+TIMEOUT_MS = 5000
+
 frameCount = 0
+skippedFramesCount = 0
 
-while cap.isOpened():
-    ret, frame = cap.read()
+def openStream(url):
+    return cv2.VideoCapture(
+        url,
+        [
+            cv2.CAP_PROP_OPEN_TIMEOUT_MSEC,
+            TIMEOUT_MS,
+            cv2.CAP_PROP_READ_TIMEOUT_MSEC,
+            TIMEOUT_MS,
+        ],
+    )
 
-    if not ret:
+while True:
+    grabbed = cap.grab()
+
+    if not grabbed:
         print("Failed to capture frame", flush=True)
         time.sleep(5)
-        cap = cv2.VideoCapture(URL)
+        cap.release()
+        cap = openStream(URL)
         continue
 
-
     frameCount += 1
-    if frameCount % (streamFps // TARGET_FPS)  == 0:
+
+    if frameCount % (streamFps // TARGET_FPS) == 0:
+        ret, frame = cap.retrieve()
+        if not ret:
+            print("Failed to retrieve frame", flush=True)
+            skippedFramesCount += 1
+            if skippedFramesCount >= MAX_SKIPPED_FRAMES:
+                print("Too many skipped frames. Reconnecting to stream.", flush=True)
+                cap.release()
+                cap = openStream(URL)
+                skippedFramesCount = 0
+            continue
+
+        skippedFramesCount = 0
         prediction = net.predict(frame)
         #timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
         timestampStart = datetime.now(timezone.utc) - timedelta(seconds=5)
