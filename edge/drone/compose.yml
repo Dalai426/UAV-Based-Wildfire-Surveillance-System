@@ -26,10 +26,12 @@ services:
 
   # plays a recorded drone video as a live H.264 stream to MediaMTX
   camera:
+    # A small helper runs as PID 1: it passes on Docker's stop signal and cleans up finished processes
+    init: true
     build:
       context: ./camera
 
-    # Arguments for stream_video.sh: [video_file] [bitrate]
+    # Arguments passed to stream_video.sh: [video_file] [bitrate]
     command: ["/videos/${VIDEO_FILE:?set VIDEO_FILE in .env}", "${BITRATE:?set BITRATE in .env}"]
 
     environment:
@@ -48,9 +50,8 @@ services:
     networks:
       - drone-net
 
-    # Try again if streaming fails
-    # When the video has played to the end, the container stays stopped
-    restart: on-failure
+    # Restart the camera if camera_control.py itself crashes, but never one you stopped yourself.
+    restart: unless-stopped
 
 networks:
   # The drone's own network
