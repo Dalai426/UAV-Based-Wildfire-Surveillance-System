@@ -31,8 +31,24 @@ Resources:
     Properties:
       Description: Drone surveillance system Dashboard backend API
       StageName: prod
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowMethods: "'GET,POST,OPTIONS'"
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,Authorization'"
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !Ref UserPoolArn
@@ -84,6 +100,20 @@ Resources:
             RestApiId:
               Ref: DashboardBackendApi
             Path: /incidents/{gs_event_id}/close
+            Method: post
+        GetIncident:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: DashboardBackendApi
+            Path: /incidents/{gs_event_id}
+            Method: get
+        VerifyIncident:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: DashboardBackendApi
+            Path: /incidents/{gs_event_id}/verify
             Method: post
     Metadata:
       BuildMethod: python3.13

@@ -1,7 +1,7 @@
 import json
 from configs.logger_config import logger
 from configs.async_loop_config import loop
-from handlers.incident_handler import list_incidents, close_incident
+from handlers.incident_handler import list_incidents, get_incident, verify_incident, close_incident
 from models.errors import NotFoundError, ConflictError
 from pydantic import ValidationError
 from configs.db_config import get_db_pool
@@ -9,6 +9,8 @@ from configs.db_config import get_db_pool
 # The path is written the way template.yaml declares it
 routes = {
     ("GET", "/incidents"): list_incidents,
+    ("GET", "/incidents/{gs_event_id}"): get_incident,
+    ("POST", "/incidents/{gs_event_id}/verify"): verify_incident,
     ("POST", "/incidents/{gs_event_id}/close"): close_incident,
 }
 pool=loop.run_until_complete(get_db_pool())
@@ -17,7 +19,8 @@ def response(status_code, data):
     return {
         "statusCode": status_code,
         "headers": {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
         },
         "body": json.dumps(data)
     }
