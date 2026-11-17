@@ -6,51 +6,96 @@ from models.closeIncident import IncidentPath, CloseIncident
 from models.errors import NotFoundError, ConflictError
 
 
+INCIDENT_SELECT = """
+    SELECT d.gs_event_id, d.detection_timestamp,
+           d.footage_duration, d.latitude, d.longitude,
+           d.status::text AS status, d.confidence_percent,
+           d.ground_station_id, d.ground_station::text AS ground_station,
+           d.drone_id, d.drone::text AS drone, d.created_at,
+           c.closed_by, c.closed_at
+    FROM wildfire_detections d
+    LEFT JOIN incident_closures c ON c.gs_event_id = d.gs_event_id
+"""
+
+
+def to_incident(r):
+    return {
+        "gs_event_id": r["gs_event_id"],
+        "detection_time": r["detection_timestamp"].isoformat(),
+        "footage_duration": r["footage_duration"],
+        "status": r["status"],
+        "confidence_percent": r["confidence_percent"],
+        "coordinates": {
+            "latitude": r["latitude"],
+            "longitude": r["longitude"],
+        },
+        "ground_station_id": r["ground_station_id"],
+        "ground_station": json.loads(r["ground_station"] or "{}"),
+        "drone_id": r["drone_id"],
+        "drone": json.loads(r["drone"] or "{}"),
+        "created_at": r["created_at"].isoformat(),
+        "closed_by": r["closed_by"],
+        "closed_at": r["closed_at"].isoformat() if r["closed_at"] else None,
+    }
+
+
 async def list_incidents(data):
     pool = await get_db_pool()
     try:
         async with pool.acquire() as conn:
-            rows = await conn.fetch("""
-                SELECT d.gs_event_id, d.detection_timestamp,
-                       d.footage_duration, d.latitude, d.longitude,
-                       d.status::text AS status, d.confidence_percent,
-                       d.ground_station_id, d.ground_station::text AS ground_station,
-                       d.drone_id, d.drone::text AS drone, d.created_at,
-                       c.closed_by, c.closed_at
-                FROM wildfire_detections d
-                LEFT JOIN incident_closures c ON c.gs_event_id = d.gs_event_id
-                ORDER BY d.detection_timestamp DESC
-                """)
+            rows = await conn.fetch(
+                INCIDENT_SELECT + " ORDER BY d.detection_timestamp DESC"
+            )
     except asyncpg.PostgresError as exc:
         logger.error("PostgreSQL error while reading detections %s", exc)
         raise
     except Exception as exc:
         logger.exception("Error while reading detections %s", exc)
         raise
-    return {
-        "success": True,
-        "data": [
-            {
-                "gs_event_id": r["gs_event_id"],
-                "detection_time": r["detection_timestamp"].isoformat(),
-                "footage_duration": r["footage_duration"],
-                "status": r["status"],
-                "confidence_percent": r["confidence_percent"],
-                "coordinates": {
-                    "latitude": r["latitude"],
-                    "longitude": r["longitude"],
-                },
-                "ground_station_id": r["ground_station_id"],
-                "ground_station": json.loads(r["ground_station"] or "{}"),
-                "drone_id": r["drone_id"],
-                "drone": json.loads(r["drone"] or "{}"),
-                "created_at": r["created_at"].isoformat(),
-                "closed_by": r["closed_by"],
-                "closed_at": r["closed_at"].isoformat() if r["closed_at"] else None,
-            }
-            for r in rows
-        ],
-    }
+    return {"success": True, "data": [to_incident(r) for r in rows]}
+
+
+async def get_incident(data):
+    path = IncidentPath.model_validate(data.get("pathParameters") or {})
+    pool = await get_db_pool()
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                INCIDENT_SELECT + " WHERE d.gs_event_id = $1",
+                path.gs_event_id
+            )
+    except asyncpg.PostgresError as exc:
+        logger.error("PostgreSQL error while reading incident %s", exc)
+        raise
+    if row is None:
+        raise NotFoundError("Incident not found")
+    return {"success": True, "data": to_incident(row)}
+
+
+async def verify_incident(data):
+    path = IncidentPath.model_validate(data.get("pathParameters") or {})
+    pool = await get_db_pool()
+    try:
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                status = await conn.fetchval(
+                    "SELECT status::text FROM wildfire_detections WHERE gs_event_id = $1 FOR UPDATE",
+                    path.gs_event_id
+                )
+                if status is None:
+                    raise NotFoundError("Incident not found")
+                if status != "active":
+                    raise ConflictError(f"Only active incidents can be verified, this one is {status}")
+                await conn.execute(
+                    "UPDATE wildfire_detections SET status = 'verified' WHERE gs_event_id = $1",
+                    path.gs_event_id
+                )
+    except asyncpg.PostgresError as exc:
+        logger.error("PostgreSQL error while verifying incident %s", exc)
+        raise
+    except (NotFoundError, ConflictError):
+        raise
+    return {"success": True, "data": {"gs_event_id": path.gs_event_id, "status": "verified"}}
 
 
 async def close_incident(data):
