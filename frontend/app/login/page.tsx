@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,24 +12,69 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { getCurrentUser, signIn } from "aws-amplify/auth"
 
 export default function LoginPage() {
   const router = useRouter()
-  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    async function checkExistingSession() {
+      try {
+        await getCurrentUser()
+        router.replace("/detections")
+      } catch {
+      }
+    }
+
+    checkExistingSession()
+  }, [router])
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!username || !password) {
-      setError("Please enter your username and password.")
+    if (!email || !password) {
+      setError("Please enter your email and password.")
       return
     }
 
     setError("")
+    setLoading(true)
 
-    router.push("/detections")
+    try {
+      const result = await signIn({
+        username: email.trim(),
+        password,
+      })
+
+      if (result.nextStep.signInStep === "DONE") {
+        router.replace("/detections")
+        return
+      }
+
+      if (
+        result.nextStep.signInStep ===
+        "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"
+      ) {
+        setError(
+          "You must set a new password before signing in."
+        )
+        return
+      }
+
+      setError(
+        `Additional sign-in step required: ${result.nextStep.signInStep}`
+      )
+    } catch (error) {
+      console.error("Cognito sign-in error:", error)
+
+      setError("Incorrect email or password.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -56,16 +101,16 @@ export default function LoginPage() {
               className="space-y-5"
             >
                 <div className="space-y-2">
-                <Label htmlFor="username">
-                  Username
+                <Label htmlFor="email">
+                  Email
                 </Label>
 
                 <Input
-                  id="username"
+                  id="email"
                   type="text"
-                  placeholder="Enter your username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                 />
                 </div>
 
@@ -91,13 +136,14 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
+                disabled={loading}
                 className="h-11 w-full"
                 style={{
                   backgroundColor: "#FF6B0B",
                   color: "white",
                 }}
               >
-                Sign in
+                {loading ? "Signing in..." : "Sign in"}
               </Button>
 
             </form>

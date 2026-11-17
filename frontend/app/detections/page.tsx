@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
+export const instant = false
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-slate-50">
