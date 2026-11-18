@@ -40,6 +40,26 @@ export function DetectionInfo({
   initialStatus,
 }: DetectionInfoProps) {
   const [status, setStatus] = useState(initialStatus)
+  const [isClosing, setIsClosing] = useState(false)
+  const [closeError, setCloseError] = useState("")
+  async function handleCloseIncident() {
+    setIsClosing(true)
+    setCloseError("")
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 700))
+
+      setStatus("Closed")
+    } catch (error) {
+      console.error("Error closing incident:", error)
+
+      setCloseError(
+        "The incident could not be closed. Please try again."
+      )
+    } finally {
+      setIsClosing(false)
+    }
+  }
 
   return (
     <div className="mt-6 grid gap-6 md:grid-cols-2">
@@ -134,15 +154,15 @@ export function DetectionInfo({
         </Card>
 
         {status === "Verified" && (
-          <div className="mt-8 flex justify-center">
+          <div className="mt-8 flex flex-col items-center">
             <AlertDialog>
-
-              <AlertDialogTrigger
-                render={
-                  <Button className="h-12 min-w-52 rounded-xl bg-orange-500 px-12 text-base hover:bg-orange-600" />
-                }
-              >
-                Close incident
+              <AlertDialogTrigger>
+                <Button
+                  disabled={isClosing}
+                  className="h-12 min-w-52 rounded-xl bg-[#FF6B0B] px-12 text-base text-white hover:bg-[#E85F00]"
+                >
+                  {isClosing ? "Closing..." : "Close incident"}
+                </Button>
               </AlertDialogTrigger>
 
               <AlertDialogContent>
@@ -162,15 +182,21 @@ export function DetectionInfo({
                   </AlertDialogCancel>
 
                   <AlertDialogAction
-                    onClick={() => setStatus("Closed")}
-                    className="bg-orange-500 hover:bg-orange-600"
+                    onClick={handleCloseIncident}
+                    disabled={isClosing}
+                    className="bg-[#FF6B0B] text-white hover:bg-[#E85F00]"
                   >
-                    Close incident
+                    {isClosing ? "Closing..." : "Close incident"}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
-
             </AlertDialog>
+
+            {closeError && (
+              <p className="mt-3 text-sm text-red-600">
+                {closeError}
+              </p>
+            )}
           </div>
         )}
 
