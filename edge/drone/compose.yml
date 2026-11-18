@@ -2,17 +2,17 @@ name: wildfire-drone
 
 services:
 
-  # Simulated flight controller: ArduPilot SITL + MAVProxy.
+  # Simulated flight controller: ArduPilot SITL + MAVProxy
   sitl:
     build:
       context: ./sitl
 
-    # Keep a terminal open for MAVProxy's command prompt.
+    # Keep a terminal open for MAVProxy's command prompt
     tty: true
     stdin_open: true
 
     environment:
-      # Where to send the telemetry.
+      # Where to send the telemetry
       GROUND_HOST: ${GROUND_HOST:?set GROUND_HOST in .env}
 
     # necessary for Raspberry Pi later
@@ -35,9 +35,9 @@ services:
     command: ["/videos/${VIDEO_FILE:?set VIDEO_FILE in .env}", "${BITRATE:?set BITRATE in .env}"]
 
     environment:
-      # Which stream path (one per drone) to publish to.
+      # Which stream path (one per drone) to publish to
       STREAM_KEY: ${STREAM_KEY:?set STREAM_KEY in .env}
-      # Where to send the video.
+      # Where to send the video
       GROUND_HOST: ${GROUND_HOST:?set GROUND_HOST in .env}
 
     volumes:
@@ -50,7 +50,7 @@ services:
     networks:
       - drone-net
 
-    # Restart the camera if camera_control.py itself crashes, but never one you stopped yourself.
+    # Restart the camera if camera_control.py itself crashes, but never one you stopped yourself
     restart: unless-stopped
 
 networks:

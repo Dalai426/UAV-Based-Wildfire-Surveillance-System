@@ -47,7 +47,7 @@ def main():
             msg = link.recv_match(type="HEARTBEAT", blocking=True, timeout=3)
         except OSError:
             # sitl is gone and pymavlink's own reconnect attempts failed:
-            # stop the video, then wait in connect() until sitl is back.
+            # stop the video, then wait in connect() until sitl is back
             print("camera: lost the flight controller, reconnecting", flush=True)
             if stream is not None and stream.poll() is None:
                 stop_stream(stream)
@@ -65,11 +65,11 @@ def main():
             continue
 
         # Skip heartbeats from other programs (MAVProxy, fly_mission.py);
-        # component 1 is the flight controller.
+        # component 1 is the flight controller
         if msg.get_srcComponent() != 1:
             continue
         
-        # base_mode holds on/off flags & keeps only the "armed" flag.
+        # base_mode holds on/off flags & keeps only the "armed" flag
         armed = bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
 
         if not armed:

@@ -291,7 +291,6 @@ BITRATE=4M
 
 - **Start order.** Docker Desktop can't publish a UDP port while a container is already sending to it. If the ground station starts after the drone, the Core shows `NO LINK`. Fix: stop `sitl`, restart the ground station, start `sitl` again.
 - **MAVSDK renames some flight modes**: ArduPilot's GUIDED shows as `OFFBOARD`, STABILIZE as `STABILIZED`(not that important).
-- **The battery reading in the Ground Station Core** (`battery_pct`, `battery_v` in `/telemetry/latest`) is `null` for about 15–40 seconds after the drone starts. ArduPilot only starts sending its battery and system status a little after its position; this happens inside ArduPilot's start-up and is out of our control. Then it shows the simulated battery (100 %, 12.6 V).
 - **The flight path matches `zenmuse.mp4`.** `flight.plan` was made to take about as long as that video (about 16 minutes). Another video whose length differs significantly needs a different flight path.
 - **One video source per stream path.** The ground station README's test step 1 publishes a test video to the same path (`d7f3a91c`). Use either the drone camera or that test step, not both.
 
