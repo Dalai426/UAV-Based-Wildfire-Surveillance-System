@@ -3,10 +3,13 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class CreateEventRequest(BaseModel):
-    """Create a test event and request its first evidence interval."""
+    """A fire detection reported by the inference service."""
 
-    start: datetime
-    end: datetime
+    # Time of the frame in which fire was detected (X), with timezone:
+    # when inference read the frame, not when its analysis finished
+    detection_time: datetime
+    # How sure the model is, in percent
+    confidence_percent: float = Field(ge=0, le=100)
 
 
 class GroundStation(BaseModel):

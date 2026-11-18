@@ -1,20 +1,22 @@
 import asyncio
+import bisect
 import os
 import time
+from collections import deque
 from datetime import datetime, timezone
 
 from mavsdk.asyncio import ComponentType, Configuration, Mavsdk
 from mavsdk.asyncio.plugins.telemetry import TelemetryAsync, TelemetryError
 
 
-# Where the GSCore listens for the drone's MAVLink telemetry.
+# Where the GSCore listens for the drone's MAVLink telemetry
 # compose.yml publishes this port to the host
 TELEMETRY_CONNECTION_URL = os.environ.get(
     "TELEMETRY_CONNECTION_URL",
     "udpin://0.0.0.0:14551",
 )
 
-# No position update for this long = the link counts as STALE.
+# No position update for this long = the link counts as STALE
 STALE_AFTER_S = 2.0
 
 # How often we ask the autopilot to send telemetry (times per s)
@@ -23,7 +25,11 @@ TELEMETRY_RATE_HZ = 10.0
 # How long to wait before reconnecting telemetry receiver failed
 RETRY_AFTER_S = 5.0
 
-# How many decimals the telemetry keeps when it is sent out.
+# How long the telemetry history is kept, in seconds
+# Matches MediaMTX's recordDeleteAfter (10m)
+HISTORY_S = 600
+
+# How many decimals the telemetry keeps when it is sent out
 COORDINATE_DECIMALS = 7
 OTHER_DECIMALS = 3
 
@@ -55,7 +61,7 @@ class TelemetryState:
             "yaw_deg": None,
 
             # The autopilot's own clock (seconds since it started)
-            # for the latest attitude message.
+            # for the latest attitude message
             "drone_time_s": None,
 
             # Drone state
@@ -65,16 +71,20 @@ class TelemetryState:
             "armed": None,
         }
 
-        # When the last position arrived (time.time()).
-        # A position update is how the drone counts as "alive".
+        # When the last position arrived (time.time())
+        # A position update is how the drone counts as "alive"
         self._last_position_time = None
 
         # Before its GPS is ready, the simulator sends 0,0 as
-        # its position. That is not a real position yet.
+        # its position. That is not a real position yet
         self._has_fix = False
 
+        # Past telemetry, oldest first: (arrival time, copy of _data),
+        # one entry per position update
+        self._history = deque()
+
         # Set when the telemetry receiver failed, cleared when
-        # it reconnects.
+        # it reconnects
         self.error = None
 
     def update(self, **fields):
@@ -89,6 +99,13 @@ class TelemetryState:
             self._has_fix = not (
                 fields["lat"] == 0 and fields["lon"] == 0
             )
+
+            # Save a snapshot of all fields with its arrival time
+            self._history.append((self._last_position_time, dict(self._data)))
+
+            # Drop entries older than HISTORY_S. The oldest are at the front
+            while self._history[0][0] < self._last_position_time - HISTORY_S:
+                self._history.popleft()
 
     def link_status(self):
         """
@@ -126,7 +143,7 @@ class TelemetryState:
         data["link_status"] = self.link_status()
 
         # Ground speed from the north and east velocity,
-        # using Pythagoras.
+        # using Pythagoras
         north = data["vel_north_m_s"]
         east = data["vel_east_m_s"]
 
@@ -143,9 +160,9 @@ class TelemetryState:
         else:
             data["last_position_utc"] = None
 
-        # Round the numbers before they are sent out.
+        # Round the numbers before they are sent out
         # The stored values (self._data) stay unrounded, so later
-        # calculations can still use full precision.
+        # calculations can still use full precision
         for key, value in data.items():
             if isinstance(value, float):
                 if key in ("lat", "lon"):
@@ -155,6 +172,34 @@ class TelemetryState:
 
         return data
 
+    def position_at(self, x):
+        """
+        Find the history entry closest to time x (time.time() value).
+
+        Returns (data, distance_s):
+        data        the entry's copy of all fields, or None if the
+                    closest entry is more than STALE_AFTER_S away
+        distance_s  seconds between x and that entry, or None if
+                    the history is empty
+        """
+
+        if not self._history:
+            return None, None
+
+        # Binary search by entry time: index of the first entry at or after x
+        i = bisect.bisect_left(self._history, x, key=lambda entry: entry[0])
+
+        # The closest entry is the one just before or just after x
+        neighbours = [self._history[j] for j in (i - 1, i) if 0 <= j < len(self._history)]
+        entry_time, data = min(neighbours, key=lambda entry: abs(entry[0] - x))
+        distance_s = abs(entry_time - x)
+
+        # Too far away: the drone may have moved a lot in between
+        if distance_s > STALE_AFTER_S:
+            return None, distance_s
+
+        return data, distance_s
+
 
 async def receive_telemetry(state: TelemetryState, connection_url: str):
     """
@@ -162,20 +207,20 @@ async def receive_telemetry(state: TelemetryState, connection_url: str):
     update into `state`, until the connection fails.
     """
 
-    # We identify ourselves to the drone as a ground station.
+    # We identify ourselves to the drone as a ground station
     config = Configuration.create_with_component_type(
         ComponentType.GROUND_STATION
     )
 
     # "async with" shuts MAVSDK down cleanly when the block ends,
-    # also when it ends with an error.
+    # also when it ends with an error
     async with Mavsdk(config) as mavsdk:
 
         await mavsdk.add_any_connection(connection_url)
         print(f"Telemetry: waiting for the drone on {connection_url}")
 
-        # Wait until an autopilot sends its heartbeat.
-        # This way the Core can start before the drone.
+        # Wait until an autopilot sends its heartbeat
+        # This way the Core can start before the drone
         system = None
         while system is None:
             system = await mavsdk.first_autopilot(timeout_s=5.0)
@@ -186,13 +231,15 @@ async def receive_telemetry(state: TelemetryState, connection_url: str):
         telemetry = TelemetryAsync(system)
 
         async def request_rates():
-            # Ask the autopilot for 10 updates per second.
+            # Ask the autopilot for 10 updates per second
             # Runs next to the subscriptions below, so a slow or
-            # unanswered request never delays the data.
+            # unanswered request never delays the data
             for set_rate in (
                 telemetry.set_rate_position,
                 telemetry.set_rate_velocity_ned,
                 telemetry.set_rate_attitude_euler,
+                # Without a request, the battery only arrives with the about 15s after the position
+                telemetry.set_rate_battery,
             ):
                 try:
                     await set_rate(TELEMETRY_RATE_HZ)
@@ -203,7 +250,7 @@ async def receive_telemetry(state: TelemetryState, connection_url: str):
                     )
 
         # One small loop per kind of telemetry. Each waits for
-        # new values and stores them.
+        # new values and stores them
 
         async def position():
             async for p in telemetry.subscribe_position():
@@ -216,7 +263,7 @@ async def receive_telemetry(state: TelemetryState, connection_url: str):
 
         async def attitude():
             # timestamp_us is the autopilot's own clock: when the
-            # drone measured this attitude.
+            # drone measured this attitude
             #
             # yaw_deg is also the drone's heading (where the nose
             # points), from -180 to 180 degrees
@@ -251,7 +298,7 @@ async def receive_telemetry(state: TelemetryState, connection_url: str):
             async for is_armed in telemetry.subscribe_armed():
                 state.update(armed=is_armed)
 
-        # Run all loops at the same time, until one of them fails.
+        # Run all loops at the same time, until one of them fails
         await asyncio.gather(
             request_rates(),
             position(),
@@ -276,7 +323,7 @@ async def run_telemetry_forever(state: TelemetryState):
             await receive_telemetry(state, TELEMETRY_CONNECTION_URL)
 
         except asyncio.CancelledError:
-            # The Core is shutting down: stop quietly.
+            # The Core is shutting down: stop quietly
             raise
 
         except Exception as exc:

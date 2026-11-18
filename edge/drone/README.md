@@ -298,8 +298,8 @@ BITRATE=4M
 
 Planned additions include:
 
-- telemetry routed through the camera container, so the drone has one exit like a real drone
 - encrypted video and telemetry (RTSPS or SRT, WireGuard, MAVLink 2 signing)
 - running the drone containers on a Raspberry Pi 5 as a separate physical device
+- resume the video where it stopped after a camera restart: today it starts from the beginning, so the video no longer matches the flight path
 
 These will be added step by step as the ground station pipeline grows.

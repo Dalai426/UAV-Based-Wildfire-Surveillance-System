@@ -55,9 +55,11 @@ It currently:
 - supports evidence retries using the same evidence ID
 - receives the drone's telemetry (position, altitude, speed, attitude, battery, flight mode) on UDP 14551 and serves the latest values at `GET /telemetry/latest`
 
-The current `/events` endpoint is used manually for testing. Later, events will be triggered by the detection pipeline.
+`POST /events` receives detections from the inference service (detection time and confidence) and fills the event from the telemetry history at that time.
 
-Each request currently creates one event and one evidence record. The database relationship supports multiple evidence records per event, but additional-clip creation and event association logic are not implemented.
+The inference service only reports fire once 3 of its last 5 predictions are above the threshold, and uses the oldest of those fire frames as the detection time.
+
+Detections at most 4.5 s apart (`EPISODE_GAP_S`) belong to the same fire episode: the first creates one event and one evidence record, the following ones join that event. The database relationship supports multiple evidence records per event, but additional-clip creation is not implemented.
 
 ### Cloud Sync
 
@@ -147,11 +149,17 @@ When an event is created:
 ```text
 Create event
     ↓
+Same episode as the previous detection? → reply with its event_id, stop
+    ↓
+Look up telemetry at the detection time
+    ↓
 Generate event_id and evidence_id
     ↓
 Save event to SQLite
     ↓
 Save separate pending evidence record
+    ↓
+Reply; wait 7 s in the background
     ↓
 Request recorded interval from Media Server
     ↓
@@ -280,40 +288,38 @@ ffplay test-evidence.mp4
 
 ### 5. Create a test event
 
-Use a valid interval from the Media Server recording range:
+Simulates a detection from the inference service. The drone must be flying (see `edge/drone/README.md`), because the event takes the drone's position at the detection time.
+
+Use a detection time from the last few seconds, with a timezone:
 
 ```bash
 curl -X POST http://localhost:8080/events \
   -H "Content-Type: application/json" \
   -d '{
-    "start": "<start-time>",
-    "end": "<end-time>"
+    "detection_time": "<detection-time>",
+    "confidence_percent": 87
   }'
 ```
 
-Both timestamps must include a timezone, `end` must be after `start`, and the requested interval must not exceed `MAX_EVENT_EVIDENCE_SECONDS` (currently 20 seconds, defined in `app/main.py`). Output duration is not measured.
-
-A successful request returns:
+A successful request returns right away:
 
 ```json
 {
   "event_id": "...",
-  "status": "ready",
-  "evidence": {
-    "evidence_id": "...",
-    "event_id": "...",
-    "drone_id": "...",
-    "stream_key": "d7f3a91c",
-    "requested_start": "2026-11-01T10:00:00Z",
-    "requested_end": "2026-11-01T10:00:10Z",
-    "relative_path": "2026-11-01/<evidence_id>/video.mp4",
-    "size_bytes": 123456,
-    "sha256": "<64-character lowercase hexadecimal hash>"
-  }
+  "new_event": true,
+  "evidence_id": "...",
+  "evidence_status": "pending",
+  "telemetry_distance_s": 0.081
 }
 ```
 
-The request waits for evidence creation. It can return an error even though the event was successfully saved; `ready` in the response refers to evidence completion, not a fire lifecycle state.
+Sending the request again with a detection time at most 4.5 s later returns the same `event_id` with `"new_event": false`, and creates no new event or clip.
+
+`telemetry_distance_s` is how far the nearest telemetry entry is from the detection time. The event gets that entry's position, altitude, speed and battery.
+
+The Core fetches the clip [detection time − 5 s, detection time + 5 s] in the background, about 7 seconds later, once the footage after the detection has been recorded (`CLIP_PADDING_S` and `MEDIAMTX_WRITE_DELAY_S` in `app/main.py`). Check it with test 7.
+
+If no telemetry entry is within 2 seconds of the detection time (drone not flying, telemetry gap, or GPS not ready yet), the Core returns `409` and creates no event.
 
 ### 6. Check the generated evidence
 
@@ -405,6 +411,9 @@ Planned additions include:
 
 - AI inference from the live video stream
 - timestamp correlation between video frames and telemetry
+  - linear interpolation between the two nearest telemetry entries, instead of using the nearest entry
+  - monotonic time for the telemetry lookup: might be important for Raspberry Pi later
+- if event exceeds length limit (20s): fire duration per event (first to last detection), stored locally and sent to the cloud
 - drone/session authentication
 - production transport and storage security
 
