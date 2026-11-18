@@ -20,8 +20,11 @@ Currently implemented:
 - cloud event delivery with persisted retries
 - S3 evidence uploads with checksum verification
 - shared temporary AWS credentials through AWS IoT
+- AI fire detection on the live video stream (inference service)
+- events filled from the drone's telemetry at the detection time
+- fire episodes: one event per connected fire
 
-AI inference and drone authentication are planned but not implemented yet.
+Drone authentication is planned but not implemented yet.
 
 ## Services
 
@@ -194,8 +197,19 @@ ground-station/
 │       ├── main.py
 │       ├── db.py
 │       ├── evidence.py
-│       ├── schemas.py
-│       └── telemetry.py
+│       ├── telemetry.py
+│       └── models/
+│           ├── __init__.py
+│           ├── events.py
+│           └── evidence.py
+├── inference-service/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── main.py
+│   └── inference.py
+├── models/
+│   └── mobilenet_v2_flame3.pth
+├── cloud-sync/
 ├── data/
 │   ├── recordings/
 │   ├── evidence/
@@ -405,15 +419,24 @@ The stream key identifies the Media Server stream. It is not intended to be an a
 
 Media recording behavior, retention, and related media settings are configured separately in the MediaMTX configuration.
 
+## Known Issues
+
+- **PyTorch is limited to 2 threads** (`TORCH_THREADS` in `inference-service/inference.py`). By default PyTorch uses every CPU core; for this small model that made predictions slower and took CPU time from video decoding, so inference fell behind the stream (MediaMTX "reader is too slow" warnings, decode errors, about 840 % CPU). With 2 threads it keeps up at about 90 % CPU. The Raspberry Pi 5 has only 4 cores, shared with MediaMTX, the Core and video decoding, so the value has to be measured again there; if the Pi still cannot keep up, lower `TARGET_FPS`.
+
 ## Roadmap
 
 Planned additions include:
 
-- AI inference from the live video stream
 - timestamp correlation between video frames and telemetry
   - linear interpolation between the two nearest telemetry entries, instead of using the nearest entry
   - monotonic time for the telemetry lookup: might be important for Raspberry Pi later
-- if event exceeds length limit (20s): fire duration per event (first to last detection), stored locally and sent to the cloud
+  - measure the real offset between video and telemetry (their delays from the drone to the ground station differ)
+- wait until MediaMTX's `/list` shows the footage instead of a fixed 2 s (`MEDIAMTX_WRITE_DELAY_S`): a fixed wait is a guess, too short under heavy load (the clip misses its end) and longer than needed otherwise
+- keep the inference service running when the Core is unreachable: `requests.post` currently raises an error, so the service crashes and restarts
+- shorter recording retention (data minimisation under GDPR): MediaMTX keeps 10 minutes of footage, including people and property unrelated to any event; a shorter window stores less personal data (team decision)
+- if event exceeds length limit (20s): entire fire duration will still be stored locally and sent to the cloud or add more clips to the same event
+- store the current fire episode in SQLite: it is kept in memory, so a Core restart during a fire creates a second event for it
+- save the telemetry of the clip window (`telemetry.json`) next to each clip: the event only has the position at the detection time, while the drone moves about 100 m during a 10 s clip; inside the hashed evidence folder, footage and location data are also tamper-evident together
 - drone/session authentication
 - production transport and storage security
 

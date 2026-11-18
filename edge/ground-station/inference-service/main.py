@@ -64,6 +64,8 @@ while True:
         time.sleep(5)
         cap.release()
         cap = openStream(URL)
+        # Forget frames from before the outage, so X cannot come from them
+        recent.clear()
         continue
 
     frameCount += 1
@@ -78,6 +80,8 @@ while True:
                 cap.release()
                 cap = openStream(URL)
                 skippedFramesCount = 0
+                # Forget frames from before the outage, so X cannot come from them
+                recent.clear()
             continue
 
         skippedFramesCount = 0
