@@ -74,6 +74,29 @@ def get_active_flight(drone_id: str):
     }
 
 
+def get_last_active_session(drone_id: str):
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM sentinel_flights
+            WHERE drone_id = ?
+              AND status = 'active'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (drone_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {
+        "drone_id": row["drone_id"],
+        "session_key": row["session_key"],
+        "status": row["status"],
+        "created_at": row["created_at"],
+    }
+
+
 def revoke_flight_session(drone_id: str, localStorage: bool = True):
     with get_connection() as conn:
         if localStorage:

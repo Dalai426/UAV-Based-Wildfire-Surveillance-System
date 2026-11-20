@@ -18,3 +18,8 @@ class HandshakeInitResponse(BaseModel):
 class HandshakeCompleteRequest(BaseModel):
     handshake_id: str
     confirmation: str
+
+
+class RevokeRequest(BaseModel):
+    drone_id: str
+    session: str

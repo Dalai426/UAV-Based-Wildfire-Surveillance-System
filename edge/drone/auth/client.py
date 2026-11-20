@@ -344,6 +344,23 @@ def establish_session() -> bytes:
     return session_key
 
 
+# --------------------------------------------------
+# When drone mission finish, drones should call it
+# --------------------------------------------------
+
+
+def revokeSession(session: bytes):
+    init_request = {
+        "drone_id": DRONE_ID,
+        "session": base64.b64encode(session).decode("ascii"),
+    }
+    response = requests.post(f"{GROUND_URL}/revoke/session", json=init_request)
+    response.raise_for_status()
+    handshake_response = response.json()
+    print(handshake_response)
+    return True
+
+
 def main():
 
     session_key = establish_session()
@@ -352,6 +369,7 @@ def main():
 
     # Do not print the actual session key in production.
     print("Session key fingerprint:", hashlib.sha256(session_key).hexdigest())
+    revokeSession(session_key)
 
 
 if __name__ == "__main__":
