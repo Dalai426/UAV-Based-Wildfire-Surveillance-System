@@ -98,6 +98,10 @@ The drone only opens connections; nothing can connect to it. Data still flows bo
 
 The AI inference service reads the live video from MediaMTX inside the ground station's Docker network (`rtsp://media-server:8554/d7f3a91c`, over TCP); it does not connect to the drone.
 
+## How Drones Authenticate with GS
+1. Session Establishment: When the drone receives a mission, it establishes an authenticated session with the ground station using the edge/drone/auth module and RSA certificates for authentication.
+2. Telemetry Signing: Once the session is established, the drone uses the derived session key to sign outgoing telemetry messages through MAVProxy's MAVLink signing functionality before transmitting them to its authenticated ground station.
+3. Session Revocation: Once the mission is completed and the drone has safely returned to its home location and stopped, it revokes the established session using the revoke session functionality in the edge/drone/auth module. This terminates the session and prevents further use of the session key.
 ## Project Structure
 
 ```text
