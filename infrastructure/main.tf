@@ -48,7 +48,9 @@ module "monitoring" {
 module "storage" {
   source = "./s3"
   // variables
-  s3_bucket_name = local.s3_bucket_name
+  s3_bucket_name          = local.s3_bucket_name
+  vpc_id                  = module.network.vpc_id
+  private_route_table_ids = module.network.private_route_table_ids
 }
 
 module "sns" {

@@ -96,6 +96,25 @@ resource "aws_iam_role_policy_attachment" "read_from_cognito" {
   policy_arn = aws_iam_policy.lambda_cognito_read.arn
 }
 
+# The Role for Pre-signing S3 url
+resource "aws_iam_role_policy" "lambda_s3_presign" {
+  name = "${var.project_name}-s3-pre-sign-read"
+  role = aws_iam_role.lambda_role["dashboardBackend"].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject"
+        ]
+        Resource = "${var.s3_bucket_arn}/*"
+      }
+    ]
+  })
+}
+
 # The Lambda Role's Policy for Basic Execution.
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   for_each   = var.permissions_for_lambda
@@ -207,26 +226,4 @@ resource "aws_iot_policy" "iot_credential_policy" {
 
 data "aws_iot_endpoint" "credential_provider" {
   endpoint_type = "iot:CredentialProvider"
-}
-
-# Optional: If we use SES, we can use it.
-resource "aws_iam_policy" "lambda_ses_access" {
-  name        = "${var.project_name}-lambda-ses-access"
-  description = "Allow Lambda to send emails using Amazon SES"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "ses:SendEmail"
-      ]
-      Resource = "*"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_ses_access" {
-  role       = aws_iam_role.lambda_role["gsBackend"].name
-  policy_arn = aws_iam_policy.lambda_ses_access.arn
 }

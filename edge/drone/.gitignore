@@ -5,3 +5,4 @@
 # The empty .gitkeep keeps the folder itself in git.
 videos/*
 !videos/.gitkeep
+certs/*

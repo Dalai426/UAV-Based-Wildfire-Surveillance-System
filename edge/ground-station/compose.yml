@@ -1,5 +1,4 @@
 services:
-
   # MediaMTX handles:
   # - incoming live video streams
   # - serving live video to the AI service
@@ -28,7 +27,7 @@ services:
       # http://media-server:9996
       - "127.0.0.1:9996:9996"
 
-# CPU-based wildfire inference service.
+  # CPU-based wildfire inference service.
   inference-service:
     build:
       context: ./inference-service
@@ -43,7 +42,6 @@ services:
       MODEL_WEIGHTS_PATH: /models/mobilenet_v2_flame3.pth
       STREAM_KEY: ${STREAM_KEY}
       DRONE_ID: ${DRONE_ID}
-
 
     volumes:
       - ./models:/models:ro
@@ -86,6 +84,11 @@ services:
       # Where Core listens for the drone's MAVLink telemetry.
       TELEMETRY_CONNECTION_URL: udpin://0.0.0.0:14551
 
+      # certificates
+      GS_CERT_PATH: /certs/sentinel/gs-001_certificate.pem
+      GS_KEY_PATH: /certs/sentinel/gs-001_private_key.pem
+      CA_CERT_PATH: /certs/sentinel/ca_certificate.pem
+
     volumes:
       # Final evidence clips and metadata.
       - ./data/evidence:/data/evidence
@@ -93,6 +96,8 @@ services:
       # SQLite database.
       - ./data/database:/data/database
 
+      # Read authentication files from the host.
+      - ${CLOUD_CERTS_DIR:?Set CLOUD_CERTS_DIR in .env with an absolute path to the local certificate directory}:/certs:ro
     ports:
       # Ground Station Core API.
       - "8080:8080"
@@ -103,6 +108,10 @@ services:
       # The drone sends its telemetry here, from outside Docker's
       # internal network, like a real drone would.
       - "14551:14551/udp"
+    develop:
+      watch:
+        - action: rebuild
+          path: ./ground-station-core
 
   cloud-sync:
     build:
@@ -130,5 +139,3 @@ services:
 
       # Read authentication files from the host.
       - ${CLOUD_CERTS_DIR:?Set CLOUD_CERTS_DIR in .env with an absolute path to the local certificate directory}:/certs:ro
-
-      

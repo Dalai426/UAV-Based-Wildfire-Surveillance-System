@@ -27,3 +27,8 @@ output "lambda_security_group" {
   description = "ID of the security group for lambda functions"
   value       = aws_security_group.lambda.id
 }
+
+output "private_route_table_ids" {
+  description = "Private route table IDs for VPC endpoints"
+  value       = module.vpc.private_route_table_ids
+}

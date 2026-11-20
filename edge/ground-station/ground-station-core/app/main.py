@@ -2,12 +2,12 @@ import asyncio
 import os
 import uuid
 from datetime import datetime, timezone
-
 import httpx
 from fastapi import FastAPI, HTTPException
-
 from pydantic import ValidationError
-
+import base64
+import binascii
+from cryptography import x509
 
 from app.db import (
     insert_event,
@@ -23,13 +23,18 @@ from app.db import (
 from app.evidence import create_evidence
 
 from app.models.evidence import CreateEvidence, Evidence
-from app.models.events import (
-    CreateEventRequest,
-    DetectionEvent
+from app.models.events import CreateEventRequest, DetectionEvent
+from app.models.auth import (
+    HandshakeCompleteRequest,
+    HandshakeInitResponse,
+    HandshakeInitRequest,
 )
-
+from app.auth.handshake import (
+    create_handshake,
+    complete_handshake,
+)
+from app.auth.db import initialise_sentinel_database
 from app.telemetry import TelemetryState, run_telemetry_forever
-
 
 # Main Ground Station Core HTTP API.
 app = FastAPI(
@@ -85,6 +90,7 @@ def startup():
     """
 
     init_db()
+    initialise_sentinel_database()
 
 
 @app.on_event("startup")
@@ -98,9 +104,7 @@ async def start_telemetry_receiver():
 
     global telemetry_task
 
-    telemetry_task = asyncio.create_task(
-        run_telemetry_forever(telemetry_state)
-    )
+    telemetry_task = asyncio.create_task(run_telemetry_forever(telemetry_state))
 
 
 @app.on_event("shutdown")
@@ -168,10 +172,7 @@ async def create_event(
     #
     # Example:
     # 2026-10-30T10:00:00+00:00
-    if (
-        request.start.tzinfo is None
-        or request.end.tzinfo is None
-    ):
+    if request.start.tzinfo is None or request.end.tzinfo is None:
         raise HTTPException(
             status_code=400,
             detail="timestamps must include timezone",
@@ -183,9 +184,7 @@ async def create_event(
             detail="end must be after start",
         )
 
-    duration = (
-        request.end - request.start
-    ).total_seconds()
+    duration = (request.end - request.start).total_seconds()
 
     # Limit the requested interval; output duration is not measured here.
     if duration > MAX_EVENT_EVIDENCE_SECONDS:
@@ -201,18 +200,20 @@ async def create_event(
     # Persist the event before attempting evidence creation.
     # If MediaMTX or evidence creation fails, the event is
     # still known and can be retried with the same event_id.
-    cloud_event = DetectionEvent.model_validate({
-        **TEST_EVENT_VALUES,
-        "event_id": event_id,
-        "drone_id": DRONE_ID,
-        "detection_time": datetime.now(timezone.utc),
-        "footage_duration": duration,
-    })
+    cloud_event = DetectionEvent.model_validate(
+        {
+            **TEST_EVENT_VALUES,
+            "event_id": event_id,
+            "drone_id": DRONE_ID,
+            "detection_time": datetime.now(timezone.utc),
+            "footage_duration": duration,
+        }
+    )
 
     insert_event(
         event_id=event_id,
         drone_id=DRONE_ID,
-        cloud_payload_json=cloud_event.model_dump_json()
+        cloud_payload_json=cloud_event.model_dump_json(),
     )
 
     # Save the pending evidence record.
@@ -305,3 +306,72 @@ def read_latest_telemetry():
         "drone_id": DRONE_ID,
         **telemetry_state.snapshot(),
     }
+
+
+@app.post(
+    "/sentinel/handshake/init",
+    response_model=HandshakeInitResponse,
+)
+async def initialise_handshake(request: HandshakeInitRequest):
+
+    nonce_drone = decode_base64(
+        request.nonce_drone,
+        "nonce_drone",
+    )
+
+    if len(nonce_drone) != 32:
+        raise HTTPException(
+            status_code=400,
+            detail="Drone nonce must be 32 bytes",
+        )
+
+    try:
+        drone_cert_pem = request.drone_certificate.encode("ascii")
+
+        # Validate that the supplied data is a PEM certificate.
+        x509.load_pem_x509_certificate(drone_cert_pem)
+
+        response = create_handshake(
+            drone_id=request.drone_id,
+            nonce_drone=nonce_drone,
+            drone_cert_pem=drone_cert_pem,
+        )
+
+        return response
+
+    except ValueError as exc:
+        print(exc)
+        raise HTTPException(
+            status_code=401,
+            detail="Drone authentication failed",
+        ) from exc
+
+
+@app.post("/sentinel/handshake/complete")
+async def finish_handshake(request: HandshakeCompleteRequest):
+    try:
+        complete_handshake(
+            handshake_id=request.handshake_id,
+            drone_confirmation=request.confirmation,
+        )
+        return {
+            "status": "authenticated",
+            "message": "SENTINEL session established",
+        }
+
+    except ValueError as exc:
+        print(exc)
+        raise HTTPException(
+            status_code=401,
+            detail="Session key confirmation failed",
+        ) from exc
+
+
+def decode_base64(value: str, field_name: str) -> bytes:
+    try:
+        return base64.b64decode(value, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid Base64 value: {field_name}",
+        ) from exc

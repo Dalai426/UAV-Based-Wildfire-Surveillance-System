@@ -5,7 +5,6 @@ resource "aws_s3_bucket" "s3_bucket" {
   }
 }
 
-
 resource "aws_s3_bucket_public_access_block" "uploads" {
   bucket                  = aws_s3_bucket.s3_bucket.id
   block_public_acls       = true
@@ -52,4 +51,12 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "file_encryption" 
       sse_algorithm = "AES256"
     }
   }
+}
+
+# S3 VPC Gateway Endpoint
+resource "aws_vpc_endpoint" "s3_gateway" {
+  vpc_id            = var.vpc_id
+  service_name      = "com.amazonaws.eu-north-1.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = var.private_route_table_ids
 }
