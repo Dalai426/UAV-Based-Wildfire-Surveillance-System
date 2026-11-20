@@ -14,7 +14,7 @@ STREAM_URL="rtsp://$GROUND_HOST:$RTSP_PORT/$STREAM_KEY"
 # Short start message, e.g. "Streaming zenmuse.mp4 at 4M to host.docker.internal:8554/d7f3a91c (MediaMTX)"
 echo "Streaming $(basename "$VIDEO") at $BITRATE to $GROUND_HOST:$RTSP_PORT/$STREAM_KEY (MediaMTX)"
 
-# Turns ffmpeg's progress reports into one short log line each.
+# Turns ffmpeg's progress reports into one short log line each
 print_progress() {
     awk -F= '
         { gsub(/ /, "", $2); value[$1] = $2 }   # remember each key=value (spaces removed)
@@ -40,9 +40,9 @@ print_progress() {
 # -progress pipe:1         write progress reports to stdout, which goes to print_progress
 # -stats_period 5          one progress report every 5 seconds
 #
-# Warnings and errors still go to stderr, straight into the log.
+# Warnings and errors still go to stderr, straight into the log
 # If ffmpeg fails, "set -o pipefail" makes the whole pipe fail, so the script exits with an
-# error and Docker restarts the camera (restart: on-failure in compose.yml).
+# error and Docker restarts the camera (restart: on-failure in compose.yml)
 ffmpeg -hide_banner -loglevel warning -nostats -progress pipe:1 -stats_period 5 \
     -re -i "$VIDEO" \
     -map 0:v:0 -r 30 \

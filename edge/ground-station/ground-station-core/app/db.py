@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from app.models.evidence import CreateEvidence, Evidence
 
 
-# Location of the SQLite database inside the container.
+# Location of the SQLite database inside the container
 DATABASE_PATH = os.environ["DATABASE_PATH"]
 
 
@@ -19,11 +19,11 @@ def connect():
 
     connection = sqlite3.connect(DATABASE_PATH)
 
-    # Return rows that behave like dictionaries instead of tuples.
+    # Return rows that behave like dictionaries instead of tuples
     connection.row_factory = sqlite3.Row
 
 
-    # Reject evidence records referencing a nonexistent event.
+    # Reject evidence records referencing a nonexistent event
     connection.execute("PRAGMA foreign_keys = ON")
 
     return connection

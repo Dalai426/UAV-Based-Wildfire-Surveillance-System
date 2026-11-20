@@ -6,6 +6,11 @@ from torchvision.transforms import v2
 
 DROPOUT_RATE = 0.5
 
+# PyTorch uses every CPU core by default; for this small model that is
+# slower and starves video decoding and the other services of CPU time
+TORCH_THREADS = 2
+torch.set_num_threads(TORCH_THREADS)
+
 class CustomModel:
     def __init__(self, weights_path):
         self.weights_path = weights_path
@@ -34,9 +39,11 @@ class CustomModel:
         return net
 
     def predict(self, image):
+        # ToImage must come first: Resize leaves plain NumPy arrays
+        # (OpenCV frames) unchanged, so the model would get the full frame
         img_transform = v2.Compose([
-            v2.Resize((224, 224)),
             v2.ToImage(),
+            v2.Resize((224, 224)),
             v2.ToDtype(torch.float32, scale=True),
             v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
@@ -44,4 +51,6 @@ class CustomModel:
         image = img_transform(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)).unsqueeze(0)
         with torch.no_grad():
             output = self.net(image)
-        return output.item() > 0.5
+        # Training labels follow ImageFolder's alphabetical folder order
+        # (Fire = 0, No_Fire = 1), so the model outputs the probability of no fire
+        return 1 - output.item()

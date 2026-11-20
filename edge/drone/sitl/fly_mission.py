@@ -29,24 +29,29 @@ def connect():
 
 def set_parameter(link, name, value):
     """Change one flight controller setting and wait until the flight controller answers."""
-    # Send the setting's name and new value. INT32: the setting holds a whole number.
+    # Send the setting's name and new value. INT32: the setting holds a whole number
     link.mav.param_set_send(link.target_system, link.target_component, name.encode(),
                             value, mavutil.mavlink.MAV_PARAM_TYPE_INT32)
 
     # The flight controller answers with a PARAM_VALUE message. Answers about other
-    # settings can arrive too, so keep reading until the one for this setting shows up.
+    # settings can arrive too, so keep reading until the one for this setting shows up
     while True:
         reply = link.recv_match(type="PARAM_VALUE", blocking=True, timeout=5)
-        # None: no answer within 5 seconds. Carry on anyway; the value is not checked here.
+        # None: no answer within 5 seconds. Carry on anyway; the value is not checked here
         if reply is None or reply.param_id == name:
             return
 
 
 def request_status_messages(link):
-    """Ask the flight controller to send SYS_STATUS once per second (pre-arm checks passed?)."""
-    link.mav.command_long_send(link.target_system, link.target_component,
-                               mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
-                               mavutil.mavlink.MAVLINK_MSG_ID_SYS_STATUS, 1_000_000, 0, 0, 0, 0, 0)
+    """
+    Ask the flight controller to send, once per second:
+    SYS_STATUS (pre-arm checks passed?) and EKF_STATUS_REPORT (position estimate ready?).
+    """
+    for message_id in (mavutil.mavlink.MAVLINK_MSG_ID_SYS_STATUS,
+                       mavutil.mavlink.MAVLINK_MSG_ID_EKF_STATUS_REPORT):
+        link.mav.command_long_send(link.target_system, link.target_component,
+                                   mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+                                   message_id, 1_000_000, 0, 0, 0, 0, 0)
 
 
 def load_plan(path):
@@ -124,42 +129,64 @@ def upload_with_retries(link, path, attempts=5):
 
 def wait_until_ready(link):
     """
-    Wait until the drone reports that its pre-arm checks pass (sensors settled, GPS fix,
-    position estimate). Arming earlier only fills the ground station with error messages.
+    Wait until the drone can arm in AUTO: pre-arm checks pass and the position estimate is ready.
     """
+    # 1. The general pre-arm checks pass (sensors settled, GPS fix)
     while True:
         status = link.recv_match(type="SYS_STATUS", blocking=True, timeout=5)
         if status and status.onboard_control_sensors_health & mavutil.mavlink.MAV_SYS_STATUS_PREARM_CHECK:
+            break
+
+    # 2. The position estimate is ready. AUTO needs it, but the pre-arm checks above don't
+    #    include it: it is checked only when arming ("Arm: Need Position Estimate")
+    #    On the ground, ArduPilot accepts either flag: position known, or known once airborne
+    position_ready = mavutil.mavlink.EKF_POS_HORIZ_ABS | mavutil.mavlink.EKF_PRED_POS_HORIZ_ABS
+    while True:
+        report = link.recv_match(type="EKF_STATUS_REPORT", blocking=True, timeout=5)
+        if report and report.flags & position_ready:
             return
 
 
 def arm_in_auto(link):
-    """Switch to AUTO and arm. If the drone still refuses, try again a few seconds later."""
+    """
+    Switch to AUTO and arm. If the drone is not armed within 2 seconds, try again 2 seconds later.
+
+    Success is read from the flight controller's HEARTBEAT,
+    not from COMMAND_ACK: the confirmation of set_mode can arrive before the one for arming.
+    """
     while True:
         link.set_mode("AUTO")
         link.arducopter_arm()
-        ack = link.recv_match(type="COMMAND_ACK", blocking=True, timeout=3)
-        if ack and ack.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM \
-                and ack.result == mavutil.mavlink.MAV_RESULT_ACCEPTED:
-            return
-        time.sleep(5)
+
+        # Heartbeats arrive once per second; give the drone 2 seconds to report "armed"
+        deadline = time.time() + 2
+        while time.time() < deadline:
+            heartbeat = link.recv_match(type="HEARTBEAT", blocking=True, timeout=deadline - time.time())
+            if heartbeat is None:
+                break
+            # Only the flight controller (component 1) reports the drone's state
+            if heartbeat.get_srcComponent() != 1:
+                continue
+            if heartbeat.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED:
+                return
+        time.sleep(2)
 
 
 def main():
     path = sys.argv[1]   # the flight plan, e.g. /missions/flight.plan
 
-    # 1. Connect to the simulated flight controller (waits until the simulator is up).
+    # 1. Connect to the simulated flight controller (waits until the simulator is up)
     link = connect()
     log(f"connected, uploading {path}")
 
     # 2. Prepare the drone: ask for the status messages this script needs, and allow
-    #    arming and taking off in AUTO mode without a pilot.
+    #    arming and taking off in AUTO mode without a pilot
     request_status_messages(link)
     set_parameter(link, "AUTO_OPTIONS", AUTO_OPTIONS)
-    # 3. Upload the flight plan and make sure the drone stored all of it.
+    # 3. Upload the flight plan and make sure the drone stored all of it
     count = upload_with_retries(link, path)
     log(f"mission uploaded and stored ({count} items), waiting until the drone is ready to fly")
-    # 4. Wait for GPS and the position estimate, then start the mission.
+    # 4. Wait for the pre-arm checks and the position estimate, then start the mission
     wait_until_ready(link)
     arm_in_auto(link)
     log("armed in AUTO, mission started")
