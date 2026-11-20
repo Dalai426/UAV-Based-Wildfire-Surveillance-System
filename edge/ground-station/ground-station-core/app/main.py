@@ -1,9 +1,17 @@
 import asyncio
 import os
 import uuid
+<<<<<<< HEAD
 from datetime import datetime, timezone
 import httpx
 from fastapi import FastAPI, HTTPException
+=======
+from datetime import timedelta, timezone
+
+import httpx
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+
+>>>>>>> origin/main
 from pydantic import ValidationError
 import base64
 import binascii
@@ -29,6 +37,7 @@ from app.models.auth import (
     HandshakeInitResponse,
     HandshakeInitRequest,
 )
+<<<<<<< HEAD
 from app.auth.handshake import (
     create_handshake,
     complete_handshake,
@@ -37,50 +46,84 @@ from app.auth.db import initialise_sentinel_database
 from app.telemetry import TelemetryState, run_telemetry_forever
 
 # Main Ground Station Core HTTP API.
+=======
+
+from app.telemetry import STALE_AFTER_S, TelemetryState, run_telemetry_forever
+
+
+# Main Ground Station Core HTTP API
+>>>>>>> origin/main
 app = FastAPI(
     title="Ground Station Core",
 )
 
 
-# Temporary MVP configuration.
+# Temporary MVP configuration
 #
 # Later these will be determined dynamically from authenticated
-# drone sessions instead of environment variables.
+# drone sessions instead of environment variables
 DRONE_ID = os.environ["DRONE_ID"]
 STREAM_KEY = os.environ["STREAM_KEY"]
 
-# Maximum requested interval for event evidence, in seconds.
+# Maximum requested interval for event evidence, in seconds
 MAX_EVENT_EVIDENCE_SECONDS = 20
 
-# Temporary detection values for manual testing.
-TEST_EVENT_VALUES = {
+# Seconds of footage before and after the detection time X:
+# the clip is [X - CLIP_PADDING_S, X + CLIP_PADDING_S]
+CLIP_PADDING_S = 5
+
+# Extra wait before fetching the clip: MediaMTX writes its recording
+# in 1-second parts, so the newest footage reaches the disk a bit later
+MEDIAMTX_WRITE_DELAY_S = 2
+
+# A detection at most this many seconds after the previous one belongs
+# to the same fire (episode) and joins its event instead of creating one
+EPISODE_GAP_S = 5
+
+# Temporary detection values for manual testing
+# TEST_EVENT_VALUES = {
+#     "ground_station_id": "test-ground-station",
+#     "ground_station": {},
+#     "confidence_percent": 95.0,
+#     "status": "detected",
+#     "coordinates": {
+#         "longitude": 9.92,
+#         "latitude": 57.05,
+#     },
+#     "drone": {
+#         "speed": 0.0,
+#         "altitude": 50.0,
+#         "battery_status": "100%",
+#     },
+# }
+
+# Event values that neither the detection nor the telemetry provides yet
+# (the ground station ID will later come from authentication)
+PLACEHOLDER_EVENT_VALUES = {
     "ground_station_id": "test-ground-station",
     "ground_station": {},
-    "confidence_percent": 95.0,
     "status": "detected",
-    "coordinates": {
-        "longitude": 9.92,
-        "latitude": 57.05,
-    },
-    "drone": {
-        "speed": 0.0,
-        "altitude": 50.0,
-        "battery_status": "100%",
-    },
 }
 
 
-# Latest telemetry from the drone.
+# Latest telemetry from the drone
 #
 # Filled by the telemetry receiver (app/telemetry.py),
-# read by GET /telemetry/latest.
+# read by GET /telemetry/latest
 telemetry_state = TelemetryState()
 
-# The background task that runs the telemetry receiver.
+# The background task that runs the telemetry receiver
 #
 # We keep a reference to it: asyncio only keeps weak references
-# to tasks, so an unreferenced task could disappear mid-run.
+# to tasks, so an unreferenced task could disappear mid-run
 telemetry_task = None
+
+# The current fire episode: its event and when fire was last seen
+#
+# Kept in memory only: after a restart, the next detection
+# simply starts a new event
+episode_event_id = None
+episode_last_detection = None
 
 
 @app.on_event("startup")
@@ -121,15 +164,15 @@ async def save_evidence(request: CreateEvidence) -> Evidence:
     """Create evidence and report failures with IDs for retry."""
     try:
         # Download the requested footage and save the video
-        # and metadata. Returns a completed Evidence model.
+        # and metadata. Returns a completed Evidence model
         evidence = await create_evidence(request)
 
-        # Store the file details and mark this evidence ready.
+        # Store the file details and mark this evidence ready
         mark_evidence_ready(evidence)
         return evidence
 
     except httpx.HTTPError as exc:
-        # MediaMTX was unavailable or rejected the request.
+        # MediaMTX was unavailable or rejected the request
         mark_evidence_failed(request.evidence_id)
 
         raise HTTPException(
@@ -142,7 +185,7 @@ async def save_evidence(request: CreateEvidence) -> Evidence:
         ) from exc
 
     except (OSError, ValidationError) as exc:
-        # Saving files or validating evidence metadata failed.
+        # Saving files or validating evidence metadata failed
         mark_evidence_failed(request.evidence_id)
 
         raise HTTPException(
@@ -155,50 +198,95 @@ async def save_evidence(request: CreateEvidence) -> Evidence:
         ) from exc
 
 
+async def fetch_evidence_later(request: CreateEvidence):
+    """
+    Wait until the footage after the detection is recorded,
+    then fetch it from MediaMTX and store it as evidence.
+    """
+
+    await asyncio.sleep(CLIP_PADDING_S + MEDIAMTX_WRITE_DELAY_S)
+
+    # A failure is already marked in the database and can be retried
+    try:
+        await save_evidence(request)
+    except HTTPException as exc:
+        print(f"Evidence {request.evidence_id} failed: {exc.detail}")
+
+
 @app.post("/events")
 async def create_event(
     request: CreateEventRequest,
+    background_tasks: BackgroundTasks,
 ):
     """
-    Create a new wildfire event and its evidence.
+    Create a wildfire event from a detection reported by inference.
 
-    Currently called manually for testing.
-
-    Later this endpoint's logic will instead be triggered by
-    the detection/event-confirmation logic inside the Core.
+    The event gets the drone's telemetry at the detection time X.
+    The clip around X is fetched in the background, once the footage
+    after X has been recorded, so the answer comes back right away.
     """
 
-    # Require timezone-aware timestamps.
+    # Require a timezone-aware timestamp
     #
     # Example:
     # 2026-10-30T10:00:00+00:00
+<<<<<<< HEAD
     if request.start.tzinfo is None or request.end.tzinfo is None:
+=======
+    if request.detection_time.tzinfo is None:
         raise HTTPException(
             status_code=400,
-            detail="timestamps must include timezone",
+            detail="detection_time must include timezone",
         )
 
-    if request.end <= request.start:
+    detection_time = request.detection_time.astimezone(timezone.utc)
+
+    global episode_event_id, episode_last_detection
+
+    # Same fire as the previous detection: extend its episode,
+    # without a new event or clip
+    if (
+        episode_last_detection is not None
+        and detection_time - episode_last_detection <= timedelta(seconds=EPISODE_GAP_S)
+    ):
+        episode_last_detection = max(episode_last_detection, detection_time)
+        return {"event_id": episode_event_id, "new_event": False}
+
+    # Where the drone was when the frame was seen
+    telemetry, distance_s = telemetry_state.position_at(
+        detection_time.timestamp()
+    )
+
+    # No position close enough to X (or only 0,0 before the GPS is ready):
+    # create no event
+    if telemetry is None or (telemetry["lat"] == 0 and telemetry["lon"] == 0):
+        nearest = "none" if distance_s is None else f"{distance_s:.1f} s"
+>>>>>>> origin/main
         raise HTTPException(
-            status_code=400,
-            detail="end must be after start",
+            status_code=409,
+            detail=f"no drone position within {STALE_AFTER_S} s "
+                   f"of detection_time (nearest: {nearest})",
         )
 
+    # Ground speed from the north and east velocity (Pythagoras);
+    # velocity can be missing in the first moment after connecting
+    north = telemetry["vel_north_m_s"] or 0.0
+    east = telemetry["vel_east_m_s"] or 0.0
+
+<<<<<<< HEAD
     duration = (request.end - request.start).total_seconds()
+=======
+    # The battery is reported a few seconds after connecting
+    battery = telemetry["battery_pct"]
+>>>>>>> origin/main
 
-    # Limit the requested interval; output duration is not measured here.
-    if duration > MAX_EVENT_EVIDENCE_SECONDS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"evidence cannot exceed {MAX_EVENT_EVIDENCE_SECONDS} seconds",
-        )
-
-    # Generate the permanent event identity once.
+    # Generate the permanent event identity once
     event_id = str(uuid.uuid4())
     evidence_id = str(uuid.uuid4())
 
-    # Persist the event before attempting evidence creation.
+    # Persist the event before attempting evidence creation
     # If MediaMTX or evidence creation fails, the event is
+<<<<<<< HEAD
     # still known and can be retried with the same event_id.
     cloud_event = DetectionEvent.model_validate(
         {
@@ -209,6 +297,27 @@ async def create_event(
             "footage_duration": duration,
         }
     )
+=======
+    # still known and can be retried with the same event_id
+    cloud_event = DetectionEvent.model_validate({
+        **PLACEHOLDER_EVENT_VALUES,
+        "event_id": event_id,
+        "drone_id": DRONE_ID,
+        "detection_time": detection_time,
+        "confidence_percent": request.confidence_percent,
+        "footage_duration": 2 * CLIP_PADDING_S,
+        "coordinates": {
+            "latitude": telemetry["lat"],
+            "longitude": telemetry["lon"],
+        },
+        "drone": {
+            "speed": (north ** 2 + east ** 2) ** 0.5,
+            # Slightly below 0 on the ground; the event needs >= 0
+            "altitude": max(0.0, telemetry["alt_rel_home_m"]),
+            "battery_status": "unknown" if battery is None else f"{battery:.0f}%",
+        },
+    })
+>>>>>>> origin/main
 
     insert_event(
         event_id=event_id,
@@ -216,33 +325,39 @@ async def create_event(
         cloud_payload_json=cloud_event.model_dump_json(),
     )
 
-    # Save the pending evidence record.
+    # This event starts a new fire episode
+    episode_event_id = event_id
+    episode_last_detection = detection_time
+
+    # Save the pending evidence record
     evidence_request = CreateEvidence(
         evidence_id=evidence_id,
         event_id=event_id,
         drone_id=DRONE_ID,
         stream_key=STREAM_KEY,
-        requested_start=request.start,
-        requested_end=request.end,
+        requested_start=detection_time - timedelta(seconds=CLIP_PADDING_S),
+        requested_end=detection_time + timedelta(seconds=CLIP_PADDING_S),
     )
 
-    # Create a separate pending record for the evidence attempt.
+    # Create a separate pending record for the evidence attempt
     insert_evidence(evidence_request)
 
-    # Retrieve and persist the corresponding video evidence.
-    evidence = await save_evidence(evidence_request)
+    # Fetch the clip after this answer has been sent
+    background_tasks.add_task(fetch_evidence_later, evidence_request)
 
     return {
         "event_id": event_id,
-        "status": "ready",
-        "evidence": evidence,
+        "new_event": True,
+        "evidence_id": evidence_id,
+        "evidence_status": "pending",
+        "telemetry_distance_s": round(distance_s, 3),
     }
 
 
 @app.post("/evidence/{evidence_id}/retry")
 async def retry_evidence(evidence_id: str):
     # Load the original inputs so retries reuse the same identity,
-    # source stream, and requested interval.
+    # source stream, and requested interval
     record = get_evidence(evidence_id)
 
     if record is None:
@@ -251,8 +366,8 @@ async def retry_evidence(evidence_id: str):
             detail="evidence not found",
         )
 
-    # Convert stored inputs into the request model.
-    # Pydantic parses the saved timestamp strings as datetimes.
+    # Convert stored inputs into the request model
+    # Pydantic parses the saved timestamp strings as datetimes
     evidence_request = CreateEvidence(
         evidence_id=record["evidence_id"],
         event_id=record["event_id"],
@@ -262,7 +377,7 @@ async def retry_evidence(evidence_id: str):
         requested_end=record["requested_end"],
     )
 
-    # Reuse the creation workflow and update evidence state.
+    # Reuse the creation workflow and update evidence state
     evidence = await save_evidence(evidence_request)
 
     return {
@@ -288,7 +403,7 @@ def read_event(
             detail="event not found",
         )
 
-    # Include each clip's creation state and file details.
+    # Include each clip's creation state and file details
     return {
         **event,
         "evidence": list_event_evidence(event_id),

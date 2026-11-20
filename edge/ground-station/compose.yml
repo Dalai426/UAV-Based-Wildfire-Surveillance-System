@@ -9,25 +9,29 @@ services:
     restart: unless-stopped
 
     volumes:
-      # MediaMTX configuration.
+      # MediaMTX configuration
       - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
 
-      # Rolling recordings are persisted on the host.
+      # Rolling recordings are persisted on the host
       - ./data/recordings:/recordings
 
     ports:
-      # RTSP input/output.
-      # Used by the simulated drone publisher during development.
+      # RTSP input/output
+      # Used by the simulated drone publisher during development
       - "8554:8554"
 
-      # MediaMTX playback API.
+      # MediaMTX playback API
       #
-      # Bound only to localhost on the host machine.
+      # Bound only to localhost on the host machine
       # Other containers can still access it internally through:
       # http://media-server:9996
       - "127.0.0.1:9996:9996"
 
+<<<<<<< HEAD
   # CPU-based wildfire inference service.
+=======
+# CPU-based wildfire inference service
+>>>>>>> origin/main
   inference-service:
     build:
       context: ./inference-service
@@ -46,7 +50,7 @@ services:
     volumes:
       - ./models:/models:ro
 
-  # Main application service running on the ground station.
+  # Main application service running on the ground station
   #
   # Responsible for:
   # - drone/session management
@@ -61,27 +65,27 @@ services:
 
     restart: unless-stopped
 
-    # Start MediaMTX before starting the Core.
+    # Start MediaMTX before starting the Core
     #
-    # Note: this only controls startup order.
-    # The Core must still tolerate MediaMTX temporarily being unavailable.
+    # Note: this only controls startup order
+    # The Core must still tolerate MediaMTX temporarily being unavailable
     depends_on:
       - media-server
 
     environment:
-      # Temporary MVP configuration.
-      # Later these should come from drone/session registration instead.
+      # Temporary MVP configuration
+      # Later these should come from drone/session registration instead
       DRONE_ID: ${DRONE_ID}
       STREAM_KEY: ${STREAM_KEY}
 
-      # Internal Docker hostname for MediaMTX.
+      # Internal Docker hostname for MediaMTX
       MEDIAMTX_PLAYBACK_URL: http://media-server:9996
 
-      # Paths inside this container.
+      # Paths inside this container
       EVIDENCE_DIR: /data/evidence
       DATABASE_PATH: /data/database/ground-station.db
 
-      # Where Core listens for the drone's MAVLink telemetry.
+      # Where Core listens for the drone's MAVLink telemetry
       TELEMETRY_CONNECTION_URL: udpin://0.0.0.0:14551
 
       # certificates
@@ -90,23 +94,23 @@ services:
       CA_CERT_PATH: /certs/sentinel/ca_certificate.pem
 
     volumes:
-      # Final evidence clips and metadata.
+      # Final evidence clips and metadata
       - ./data/evidence:/data/evidence
 
-      # SQLite database.
+      # SQLite database
       - ./data/database:/data/database
 
       # Read authentication files from the host.
       - ${CLOUD_CERTS_DIR:?Set CLOUD_CERTS_DIR in .env with an absolute path to the local certificate directory}:/certs:ro
     ports:
-      # Ground Station Core API.
+      # Ground Station Core API
       - "8080:8080"
 
-      # Drone telemetry (MAVLink).
+      # Drone telemetry (MAVLink)
       #
-      # UDP, not TCP: "/udp" is required, Docker maps TCP otherwise.
+      # UDP, not TCP: "/udp" is required, Docker maps TCP otherwise
       # The drone sends its telemetry here, from outside Docker's
-      # internal network, like a real drone would.
+      # internal network, like a real drone would
       - "14551:14551/udp"
     develop:
       watch:
@@ -133,9 +137,9 @@ services:
       CLOUD_S3_BUCKET: ${CLOUD_S3_BUCKET}
 
     volumes:
-      # Read pending events and write delivery state.
+      # Read pending events and write delivery state
       - ./data/database:/data/database
       - ./data/evidence:/data/evidence:ro
 
-      # Read authentication files from the host.
+      # Read authentication files from the host
       - ${CLOUD_CERTS_DIR:?Set CLOUD_CERTS_DIR in .env with an absolute path to the local certificate directory}:/certs:ro

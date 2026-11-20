@@ -2,7 +2,7 @@
 
 # Safety settings:
 # -e           if a command fails, the script stops with an error code
-# -u           using a variable that was never set stops the script.
+# -u           using a variable that was never set stops the script
 set -eu
 
 HOME_LOCATION="55.7670,12.3830,40,0" # start position
@@ -11,7 +11,7 @@ CORE_PORT=14551 # the ground station core's telemetry receiver
 
 echo "Starting ArduCopter SITL at $HOME_LOCATION, sending MAVLink to $GROUND_HOST:$QGC_PORT and :$CORE_PORT"
 
-# Fly the flight path automatically on every start.
+# Fly the flight path automatically on every start
 python3 /usr/local/bin/fly_mission.py /missions/flight.plan &
 
 # -v ArduCopter -f quad       simulate a quadcopter

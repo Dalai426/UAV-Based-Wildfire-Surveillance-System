@@ -1,17 +1,22 @@
 name: wildfire-drone
 
 services:
+<<<<<<< HEAD
   # Simulated flight controller: ArduPilot SITL + MAVProxy.
+=======
+
+  # Simulated flight controller: ArduPilot SITL + MAVProxy
+>>>>>>> origin/main
   sitl:
     build:
       context: ./sitl
 
-    # Keep a terminal open for MAVProxy's command prompt.
+    # Keep a terminal open for MAVProxy's command prompt
     tty: true
     stdin_open: true
 
     environment:
-      # Where to send the telemetry.
+      # Where to send the telemetry
       GROUND_HOST: ${GROUND_HOST:?set GROUND_HOST in .env}
 
     # necessary for Raspberry Pi later
@@ -25,20 +30,27 @@ services:
 
   # plays a recorded drone video as a live H.264 stream to MediaMTX
   camera:
+    # A small helper runs as PID 1: it passes on Docker's stop signal and cleans up finished processes
+    init: true
     build:
       context: ./camera
 
+<<<<<<< HEAD
     # Arguments for stream_video.sh: [video_file] [bitrate]
     command:
       [
         "/videos/${VIDEO_FILE:?set VIDEO_FILE in .env}",
         "${BITRATE:?set BITRATE in .env}",
       ]
+=======
+    # Arguments passed to stream_video.sh: [video_file] [bitrate]
+    command: ["/videos/${VIDEO_FILE:?set VIDEO_FILE in .env}", "${BITRATE:?set BITRATE in .env}"]
+>>>>>>> origin/main
 
     environment:
-      # Which stream path (one per drone) to publish to.
+      # Which stream path (one per drone) to publish to
       STREAM_KEY: ${STREAM_KEY:?set STREAM_KEY in .env}
-      # Where to send the video.
+      # Where to send the video
       GROUND_HOST: ${GROUND_HOST:?set GROUND_HOST in .env}
 
     volumes:
@@ -51,9 +63,8 @@ services:
     networks:
       - drone-net
 
-    # Try again if streaming fails
-    # When the video has played to the end, the container stays stopped
-    restart: on-failure
+    # Restart the camera if camera_control.py itself crashes, but never one you stopped yourself
+    restart: unless-stopped
 
 networks:
   # The drone's own network

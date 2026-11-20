@@ -12,7 +12,8 @@ Currently implemented:
 - MAVLink telemetry to the Ground Station Core and QGroundControl
 - simulated camera: recorded footage streamed live as H.264 over RTSP to MediaMTX
 - separate Docker network for the drone, no published ports
-- automatic restart of the camera if the ground station is not reachable yet
+- camera streams only while the drone is armed (follows the flight controller over MAVLink)
+- automatic restart of the stream if the ground station is not reachable yet
 - automatic flight of the survey path in `sitl/flight.plan` on every start
 
 ## Services
@@ -30,18 +31,19 @@ Currently implemented:
 
 The image is built in two stages: a build stage compiles ArduPilot once, and a small runtime image keeps only the compiled simulator, `sim_vehicle.py` and MAVProxy. MAVProxy is installed without its window libraries (`--no-deps`), which saves about 1.2 GB.
 
-`fly_mission.py` does the automatic flight: it uploads `flight.plan` (a QGroundControl plan file), waits until the drone is ready (GPS and position estimate, about 40 seconds), and arms it in AUTO mode. The drone then flies the mission by itself.
+`fly_mission.py` does the automatic flight: it uploads `flight.plan` (a QGroundControl plan file), waits until the pre-arm checks pass and the position estimate is ready (about 40 seconds), and then arms it once in AUTO mode, so no "Need Position Estimate" warnings appear. The drone then flies the mission by itself.
 
 ### Camera
 
-The simulated drone has no camera. The camera container fills that gap by running `stream_video.sh`.
+The simulated drone has no camera. The camera container fills that gap. It runs `camera_control.py`, which reads the flight controller's heartbeat (MAVLink, TCP 5763): when the drone arms, it starts `stream_video.sh`; when the drone disarms or `sitl` disappears, it stops it.
 
 - plays a recorded drone video (f.e. `zenmuse.mp4`) in real time
 - re-encodes it like a drone's on-board encoder: constant 30 FPS, a keyframe (full picture) every second, low latency, capped bitrate (default 4 Mbit/s)
 - publishes it over RTSP (TCP) to MediaMTX (`STREAM_KEY`)
-- restarts by itself if MediaMTX is not reachable; the video then plays from the beginning
+- restarts the stream after 2 seconds if MediaMTX is not reachable; the video then plays from the beginning
+- the container itself restarts only if `camera_control.py` crashes; a camera you stopped yourself stays stopped (`unless-stopped`)
 
-### QGroundControl (optional)
+### QGroundControl
 
 [QGroundControl](https://qgroundcontrol.com) is a desktop app. It is not needed to fly: the drone flies `flight.plan` by itself. It is used to:
 
@@ -72,17 +74,18 @@ flowchart TB
         QGC["<b>QGroundControl</b><br/>desktop app, optional<br/>edit flight plan, watch drone"]
         subgraph GS["Ground station (Docker)"]
             MTX["<b>Media server</b><br/>container: media-server<br/>MediaMTX<br/>records the last 10 min"]
-            AI["<b>AI inference</b><br/>planned"]
+            AI["<b>AI inference</b><br/>container: inference-service<br/>fire detection on the live video"]
             CORE["<b>Ground Station Core</b><br/>container:<br/>ground-station-core<br/>telemetry, events,<br/>evidence"]
         end
     end
 
+    SITL -- "armed state<br/>MAVLink, TCP 5763" --> CAM
     SITL <-. "MAVLink, both ways<br/>UDP 14550" .-> QGC
     SITL <-- "MAVLink, both ways<br/>UDP 14551" --> CORE
     CAM -- "H.264 video<br/>RTSP over TCP, port 8554<br/>path /d7f3a91c" --> MTX
-    MTX --> AI
+    MTX -- "live video<br/>RTSP over TCP" --> AI
     MTX -- "evidence clips on request<br/>playback API, port 9996" --> CORE
-    AI -. "predictions (planned)" .-> CORE
+    AI -- "fire detections<br/>POST /events" --> CORE
 ```
 
 The drone only opens connections; nothing can connect to it. Data still flows both ways over those connections, e.g. commands from QGroundControl.
@@ -111,6 +114,7 @@ drone/
 │   └── start_sitl.sh
 ├── camera/
 │   ├── Dockerfile
+│   ├── camera_control.py
 │   └── stream_video.sh
 ├── images/
 │   └── flight-path.png
@@ -228,7 +232,7 @@ MediaMTX only accepts RTSP over TCP. If the picture stays black, enable "Use RTP
 
 ### 3. Check that the video keeps up in real time
 
-The video and the telemetry can only be matched correctly if the camera streams in real time. This log is where you can see that: the camera writes one progress line every 5 seconds.
+The video and the telemetry can only be matched correctly if the camera streams in real time. This log is where you can see that: the camera writes one progress line every 5 seconds. These lines only appear once the drone has armed; before that, the log shows `camera: connected to the flight controller`.
 
 ```bash
 docker compose logs -f camera
@@ -265,7 +269,7 @@ docker compose logs -f sitl
 
 Shows the drone on a map while it flies the flight path.
 
-Open QGroundControl. It connects by itself and shows the drone's position, the flight path, and its altitude, speed, battery and flight mode. The drone takes off a couple of seconds after the start (there may be some warning messages - ignore them). The whole flight takes approx. 16 minutes, about as long as the video.
+Open QGroundControl. It connects by itself and shows the drone's position, the flight path, and its altitude, speed, battery and flight mode. The drone takes off about 40 seconds after the start. The whole flight takes approx. 16 minutes, about as long as the video.
 
 ## Development Configuration
 
@@ -287,15 +291,15 @@ BITRATE=4M
 
 - **Start order.** Docker Desktop can't publish a UDP port while a container is already sending to it. If the ground station starts after the drone, the Core shows `NO LINK`. Fix: stop `sitl`, restart the ground station, start `sitl` again.
 - **MAVSDK renames some flight modes**: ArduPilot's GUIDED shows as `OFFBOARD`, STABILIZE as `STABILIZED`(not that important).
-- **The battery reading in the Ground Station Core** (`battery_pct`, `battery_v` in `/telemetry/latest`) is `null` for about 15–40 seconds after the drone starts. ArduPilot only starts sending its battery and system status a little after its position; this happens inside ArduPilot's start-up and is out of our control. Then it shows the simulated battery (100 %, 12.6 V).
+- **The flight path matches `zenmuse.mp4`.** `flight.plan` was made to take about as long as that video (about 16 minutes). Another video whose length differs significantly needs a different flight path.
 - **One video source per stream path.** The ground station README's test step 1 publishes a test video to the same path (`d7f3a91c`). Use either the drone camera or that test step, not both.
 
 ## Roadmap
 
 Planned additions include:
 
-- telemetry routed through the camera container, so the drone has one exit like a real drone
 - encrypted video and telemetry (RTSPS or SRT, WireGuard, MAVLink 2 signing)
 - running the drone containers on a Raspberry Pi 5 as a separate physical device
+- resume the video where it stopped after a camera restart: today it starts from the beginning, so the video no longer matches the flight path
 
 These will be added step by step as the ground station pipeline grows.
