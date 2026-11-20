@@ -1,12 +1,7 @@
 name: wildfire-drone
 
 services:
-<<<<<<< HEAD
-  # Simulated flight controller: ArduPilot SITL + MAVProxy.
-=======
-
   # Simulated flight controller: ArduPilot SITL + MAVProxy
->>>>>>> origin/main
   sitl:
     build:
       context: ./sitl
@@ -35,17 +30,12 @@ services:
     build:
       context: ./camera
 
-<<<<<<< HEAD
-    # Arguments for stream_video.sh: [video_file] [bitrate]
+    # Arguments passed to stream_video.sh: [video_file] [bitrate]
     command:
       [
         "/videos/${VIDEO_FILE:?set VIDEO_FILE in .env}",
         "${BITRATE:?set BITRATE in .env}",
       ]
-=======
-    # Arguments passed to stream_video.sh: [video_file] [bitrate]
-    command: ["/videos/${VIDEO_FILE:?set VIDEO_FILE in .env}", "${BITRATE:?set BITRATE in .env}"]
->>>>>>> origin/main
 
     environment:
       # Which stream path (one per drone) to publish to

@@ -1,21 +1,14 @@
 import asyncio
 import os
 import uuid
-<<<<<<< HEAD
 from datetime import datetime, timezone
 import httpx
-from fastapi import FastAPI, HTTPException
-=======
-from datetime import timedelta, timezone
-
-import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-
->>>>>>> origin/main
 from pydantic import ValidationError
 import base64
 import binascii
 from cryptography import x509
+from datetime import timedelta, timezone
 
 from app.db import (
     insert_event,
@@ -37,7 +30,6 @@ from app.models.auth import (
     HandshakeInitResponse,
     HandshakeInitRequest,
 )
-<<<<<<< HEAD
 from app.auth.handshake import (
     create_handshake,
     complete_handshake,
@@ -46,13 +38,10 @@ from app.auth.db import initialise_sentinel_database
 from app.telemetry import TelemetryState, run_telemetry_forever
 
 # Main Ground Station Core HTTP API.
-=======
 
 from app.telemetry import STALE_AFTER_S, TelemetryState, run_telemetry_forever
 
-
 # Main Ground Station Core HTTP API
->>>>>>> origin/main
 app = FastAPI(
     title="Ground Station Core",
 )
@@ -230,9 +219,6 @@ async def create_event(
     #
     # Example:
     # 2026-10-30T10:00:00+00:00
-<<<<<<< HEAD
-    if request.start.tzinfo is None or request.end.tzinfo is None:
-=======
     if request.detection_time.tzinfo is None:
         raise HTTPException(
             status_code=400,
@@ -253,19 +239,16 @@ async def create_event(
         return {"event_id": episode_event_id, "new_event": False}
 
     # Where the drone was when the frame was seen
-    telemetry, distance_s = telemetry_state.position_at(
-        detection_time.timestamp()
-    )
+    telemetry, distance_s = telemetry_state.position_at(detection_time.timestamp())
 
     # No position close enough to X (or only 0,0 before the GPS is ready):
     # create no event
     if telemetry is None or (telemetry["lat"] == 0 and telemetry["lon"] == 0):
         nearest = "none" if distance_s is None else f"{distance_s:.1f} s"
->>>>>>> origin/main
         raise HTTPException(
             status_code=409,
             detail=f"no drone position within {STALE_AFTER_S} s "
-                   f"of detection_time (nearest: {nearest})",
+            f"of detection_time (nearest: {nearest})",
         )
 
     # Ground speed from the north and east velocity (Pythagoras);
@@ -273,12 +256,8 @@ async def create_event(
     north = telemetry["vel_north_m_s"] or 0.0
     east = telemetry["vel_east_m_s"] or 0.0
 
-<<<<<<< HEAD
-    duration = (request.end - request.start).total_seconds()
-=======
     # The battery is reported a few seconds after connecting
     battery = telemetry["battery_pct"]
->>>>>>> origin/main
 
     # Generate the permanent event identity once
     event_id = str(uuid.uuid4())
@@ -286,38 +265,27 @@ async def create_event(
 
     # Persist the event before attempting evidence creation
     # If MediaMTX or evidence creation fails, the event is
-<<<<<<< HEAD
-    # still known and can be retried with the same event_id.
+    # still known and can be retried with the same event_id
     cloud_event = DetectionEvent.model_validate(
         {
-            **TEST_EVENT_VALUES,
+            **PLACEHOLDER_EVENT_VALUES,
             "event_id": event_id,
             "drone_id": DRONE_ID,
-            "detection_time": datetime.now(timezone.utc),
-            "footage_duration": duration,
+            "detection_time": detection_time,
+            "confidence_percent": request.confidence_percent,
+            "footage_duration": 2 * CLIP_PADDING_S,
+            "coordinates": {
+                "latitude": telemetry["lat"],
+                "longitude": telemetry["lon"],
+            },
+            "drone": {
+                "speed": (north**2 + east**2) ** 0.5,
+                # Slightly below 0 on the ground; the event needs >= 0
+                "altitude": max(0.0, telemetry["alt_rel_home_m"]),
+                "battery_status": "unknown" if battery is None else f"{battery:.0f}%",
+            },
         }
     )
-=======
-    # still known and can be retried with the same event_id
-    cloud_event = DetectionEvent.model_validate({
-        **PLACEHOLDER_EVENT_VALUES,
-        "event_id": event_id,
-        "drone_id": DRONE_ID,
-        "detection_time": detection_time,
-        "confidence_percent": request.confidence_percent,
-        "footage_duration": 2 * CLIP_PADDING_S,
-        "coordinates": {
-            "latitude": telemetry["lat"],
-            "longitude": telemetry["lon"],
-        },
-        "drone": {
-            "speed": (north ** 2 + east ** 2) ** 0.5,
-            # Slightly below 0 on the ground; the event needs >= 0
-            "altitude": max(0.0, telemetry["alt_rel_home_m"]),
-            "battery_status": "unknown" if battery is None else f"{battery:.0f}%",
-        },
-    })
->>>>>>> origin/main
 
     insert_event(
         event_id=event_id,

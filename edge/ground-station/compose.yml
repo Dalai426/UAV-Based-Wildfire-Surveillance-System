@@ -27,11 +27,7 @@ services:
       # http://media-server:9996
       - "127.0.0.1:9996:9996"
 
-<<<<<<< HEAD
-  # CPU-based wildfire inference service.
-=======
-# CPU-based wildfire inference service
->>>>>>> origin/main
+  # CPU-based wildfire inference service
   inference-service:
     build:
       context: ./inference-service
