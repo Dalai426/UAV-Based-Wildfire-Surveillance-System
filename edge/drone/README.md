@@ -74,7 +74,7 @@ flowchart TB
         QGC["<b>QGroundControl</b><br/>desktop app, optional<br/>edit flight plan, watch drone"]
         subgraph GS["Ground station (Docker)"]
             MTX["<b>Media server</b><br/>container: media-server<br/>MediaMTX<br/>records the last 10 min"]
-            AI["<b>AI inference</b><br/>planned"]
+            AI["<b>AI inference</b><br/>container: inference-service<br/>fire detection on the live video"]
             CORE["<b>Ground Station Core</b><br/>container:<br/>ground-station-core<br/>telemetry, events,<br/>evidence"]
         end
     end
@@ -83,9 +83,9 @@ flowchart TB
     SITL <-. "MAVLink, both ways<br/>UDP 14550" .-> QGC
     SITL <-- "MAVLink, both ways<br/>UDP 14551" --> CORE
     CAM -- "H.264 video<br/>RTSP over TCP, port 8554<br/>path /d7f3a91c" --> MTX
-    MTX --> AI
+    MTX -- "live video<br/>RTSP over TCP" --> AI
     MTX -- "evidence clips on request<br/>playback API, port 9996" --> CORE
-    AI -. "predictions (planned)" .-> CORE
+    AI -- "fire detections<br/>POST /events" --> CORE
 ```
 
 The drone only opens connections; nothing can connect to it. Data still flows both ways over those connections, e.g. commands from QGroundControl.

@@ -57,7 +57,7 @@ MEDIAMTX_WRITE_DELAY_S = 2
 
 # A detection at most this many seconds after the previous one belongs
 # to the same fire (episode) and joins its event instead of creating one
-EPISODE_GAP_S = 4.5
+EPISODE_GAP_S = 5
 
 # Temporary detection values for manual testing
 # TEST_EVENT_VALUES = {
