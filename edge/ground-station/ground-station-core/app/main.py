@@ -29,12 +29,14 @@ from app.models.auth import (
     HandshakeCompleteRequest,
     HandshakeInitResponse,
     HandshakeInitRequest,
+    RevokeRequest,
 )
 from app.auth.handshake import (
     create_handshake,
     complete_handshake,
 )
-from app.auth.db import initialise_sentinel_database
+from app.auth.authorize import authorize_session
+from app.auth.db import initialise_sentinel_database, revoke_flight_session
 from app.telemetry import TelemetryState, run_telemetry_forever
 
 # Main Ground Station Core HTTP API.
@@ -318,7 +320,7 @@ async def create_event(
         "new_event": True,
         "evidence_id": evidence_id,
         "evidence_status": "pending",
-        "telemetry_distance_s": round(distance_s, 3),
+        "telemetry_distance_s": round(float(distance_s), 3),
     }
 
 
@@ -442,6 +444,29 @@ async def finish_handshake(request: HandshakeCompleteRequest):
             "message": "SENTINEL session established",
         }
 
+    except ValueError as exc:
+        print(exc)
+        raise HTTPException(
+            status_code=401,
+            detail="Session key confirmation failed",
+        ) from exc
+
+
+@app.post("/revoke/session")
+async def missionComplete(request: RevokeRequest):
+    try:
+        authorize_session(
+            request.drone_id,
+            session=base64.b64decode(
+                request.session,
+                validate=True,
+            ),
+        )
+        revoke_flight_session(request.drone_id)
+        return {
+            "status": "revoked",
+            "message": "SENTINEL session revoked",
+        }
     except ValueError as exc:
         print(exc)
         raise HTTPException(
