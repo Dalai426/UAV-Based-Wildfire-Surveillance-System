@@ -96,18 +96,27 @@ resource "aws_iam_role_policy_attachment" "read_from_cognito" {
   policy_arn = aws_iam_policy.lambda_cognito_read.arn
 }
 
-# The Role for Pre-signing S3 url
+# The Role for Pre-signing S3 URLs
 resource "aws_iam_role_policy" "lambda_s3_presign" {
   name = "${var.project_name}-s3-pre-sign-read"
   role = aws_iam_role.lambda_role["dashboardBackend"].id
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow"
         Action = [
+          "s3:ListBucket"
+        ]
+        Resource = var.s3_bucket_arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "s3:PutObject",
-          "s3:GetObject"
+          "s3:GetObject",
+          "s3:DeleteObject"
         ]
         Resource = "${var.s3_bucket_arn}/*"
       }
