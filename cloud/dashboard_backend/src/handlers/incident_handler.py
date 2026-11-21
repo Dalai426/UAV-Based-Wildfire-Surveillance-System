@@ -4,6 +4,7 @@ from configs.logger_config import logger
 from configs.db_config import get_db_pool
 from models.closeIncident import IncidentPath, CloseIncident
 from models.errors import NotFoundError, ConflictError
+from handlers.footage import get_footage_url
 
 
 INCIDENT_SELECT = """
@@ -69,7 +70,9 @@ async def get_incident(data):
         raise
     if row is None:
         raise NotFoundError("Incident not found")
-    return {"success": True, "data": to_incident(row)}
+    incident = to_incident(row)
+    incident["footage_url"] = get_footage_url(path.gs_event_id)
+    return {"success": True, "data": incident}
 
 
 async def verify_incident(data):
