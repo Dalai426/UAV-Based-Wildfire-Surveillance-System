@@ -25,6 +25,9 @@ Parameters:
     Type: CommaDelimitedList
   LambdaSecurityGroupId:
     Type: String
+  FootageBucketName:
+    Type: String
+    Default: drone-surveillance-system-eu-north-1-s3
 Resources:
   DashboardBackendApi:
     Type: AWS::Serverless::Api
@@ -71,6 +74,8 @@ Resources:
           DB_PASSWORD:
             Ref: DBPassword
           DB_PORT: "5432"
+          S3_BUCKET:
+            Ref: FootageBucketName
       CodeUri: src/
       Handler: app.handler
       Role:
