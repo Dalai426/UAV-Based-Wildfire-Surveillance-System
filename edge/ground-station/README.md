@@ -23,8 +23,9 @@ Currently implemented:
 - AI fire detection on the live video stream (inference service)
 - events filled from the drone's telemetry at the detection time
 - fire episodes: one event per connected fire
+- drone authentication (Sentinel): certificate handshake that creates a flight session key, and session revocation (`/sentinel/handshake/init`, `/sentinel/handshake/complete`, `/revoke/session`)
 
-Drone authentication is planned but not implemented yet.
+Signing the drone's telemetry with the session key is planned but not implemented yet.
 
 ## Services
 
@@ -226,8 +227,14 @@ ground-station/
 │       ├── db.py
 │       ├── evidence.py
 │       ├── telemetry.py
+│       ├── auth/
+│       │   ├── authorize.py
+│       │   ├── db.py
+│       │   ├── handshake.py
+│       │   └── mutualAuth.py
 │       └── models/
 │           ├── __init__.py
+│           ├── auth.py
 │           ├── events.py
 │           └── evidence.py
 ├── inference-service/
@@ -241,7 +248,8 @@ ground-station/
 ├── data/
 │   ├── recordings/
 │   ├── evidence/
-│   └── database/
+│   ├── database/
+│   └── cloud-certs-placeholder/    (certificates, see Running)
 └── videos/
     └── wildfire.mp4    (not in git, only needed for test 1)
 ```
@@ -251,8 +259,21 @@ ground-station/
 Create the local data directories:
 
 ```bash
-mkdir -p data/recordings data/evidence data/database
+mkdir -p data/recordings data/evidence data/database data/cloud-certs-placeholder/sentinel
 ```
+
+Add the certificates. `CLOUD_CERTS_DIR` in `.env` (see Development Configuration) points to the folder that holds them:
+
+```text
+data/cloud-certs-placeholder/
+├── sentinel/                   needed by the Core: drone authentication (ask Dalai for these files)
+│   ├── ca_certificate.pem
+│   ├── gs-001_certificate.pem
+│   └── gs-001_private_key.pem
+└── ...                         AWS IoT certificates, needed by Cloud Sync only
+```
+
+The Core does not start without the three `sentinel` files. The folder is inside `data/`, which git ignores, so the private key is never committed.
 
 Build and start the services:
 
@@ -260,7 +281,7 @@ Build and start the services:
 docker compose up -d --build
 ```
 
-Cloud Sync needs the AWS settings and certificates in `.env`. To run only the local pipeline, without the cloud:
+Cloud Sync also needs the AWS settings in `.env` and the AWS IoT certificates. To run only the local pipeline, without the cloud:
 
 ```bash
 docker compose up -d --build media-server ground-station-core inference-service
@@ -445,6 +466,10 @@ The current development setup uses fixed values from `.env`:
 ```env
 DRONE_ID=550e8400-e29b-41d4-a716-446655440000
 STREAM_KEY=d7f3a91c
+
+# Certificate folder: sentinel/ for the Core, AWS IoT certificates for Cloud Sync
+# Without the AWS IoT certificates the local pipeline still runs, Cloud Sync cannot upload
+CLOUD_CERTS_DIR=./data/cloud-certs-placeholder
 ```
 
 These are temporary development values.
@@ -471,7 +496,7 @@ Planned additions include:
 - if event exceeds length limit (20s): entire fire duration will still be stored locally and sent to the cloud or add more clips to the same event
 - store the current fire episode in SQLite: it is kept in memory, so a Core restart during a fire creates a second event for it
 - save the telemetry of the clip window (`telemetry.json`) next to each clip: the event only has the position at the detection time, while the drone moves about 100 m during a 10 s clip; inside the hashed evidence folder, footage and location data are also tamper-evident together
-- drone/session authentication
+- sign the drone's telemetry with the flight session key (MAVLink 2 signing) and reject unsigned telemetry; the handshake that creates the key exists already
 - production transport and storage security
 
 These will be added incrementally as the local ground-station pipeline is completed and tested.
