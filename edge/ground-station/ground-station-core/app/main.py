@@ -3,7 +3,15 @@ import os
 import uuid
 from datetime import datetime, timezone
 import httpx
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+
 from pydantic import ValidationError
 import base64
 import binascii
@@ -38,6 +46,16 @@ from app.auth.handshake import (
 from app.auth.authorize import authorize_session
 from app.auth.db import initialise_sentinel_database, revoke_flight_session
 from app.telemetry import TelemetryState, run_telemetry_forever
+
+from app.logger import LogFormatter
+import logging, sys
+
+# logger setup
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(LogFormatter())
+log = logging.getLogger("app")
+log.addHandler(handler)
+log.setLevel(logging.WARNING)
 
 # Main Ground Station Core HTTP API.
 
@@ -150,6 +168,41 @@ async def stop_telemetry_receiver():
     if telemetry_task is not None:
         telemetry_task.cancel()
 
+@app.exception_handler(RequestValidationError)
+async def log_request_validation(request: Request, exc: RequestValidationError):
+    log.warning(
+        "request validation failed",
+        extra={"ctx": {"path": request.url.path, "errors": exc.errors()}},
+    )
+    return await request_validation_exception_handler(request, exc)
+
+
+@app.exception_handler(HTTPException)
+async def log_http_exception(request: Request, exc: HTTPException):
+    level = logging.ERROR if exc.status_code >= 500 else logging.WARNING
+    log.log(
+        level,
+        "http error",
+        extra={"ctx": {
+            "path": request.url.path,
+            "status": exc.status_code,
+            "detail": exc.detail,
+        }},
+    )
+    return await http_exception_handler(request, exc)
+
+@app.exception_handler(ValidationError)
+async def log_internal_validation(request: Request, exc: ValidationError):
+    log.error(
+        "internal validation failed",
+        extra={"ctx": {"path": request.url.path, "errors": exc.errors()}},
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal data validation failed"},
+    )
+
+
 
 async def save_evidence(request: CreateEvidence) -> Evidence:
     """Create evidence and report failures with IDs for retry."""
@@ -201,8 +254,7 @@ async def fetch_evidence_later(request: CreateEvidence):
     try:
         await save_evidence(request)
     except HTTPException as exc:
-        print(f"Evidence {request.evidence_id} failed: {exc.detail}")
-
+        log.error("evidence creation failed", extra={"ctx": {"status": exc.status_code, "detail": exc.detail}},)
 
 @app.post("/events")
 async def create_event(
