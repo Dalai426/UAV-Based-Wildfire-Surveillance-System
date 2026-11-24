@@ -143,3 +143,17 @@ services:
 
       # Read authentication files from the host
       - ${CLOUD_CERTS_DIR:?Set CLOUD_CERTS_DIR in .env with an absolute path to the local certificate directory}:/certs:ro
+
+  cloudwatch-agent:
+      image: amazon/cloudwatch-agent:latest
+      restart: unless-stopped
+
+      environment:
+        AWS_REGION: ${AWS_REGION}
+        AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+        AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+      volumes:
+
+        - ./cwAgent/config.json:/etc/cwagentconfig.json:ro
+        - ./data/logs:/logs:ro

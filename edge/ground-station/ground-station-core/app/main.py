@@ -48,7 +48,7 @@ from app.auth.db import initialise_sentinel_database, revoke_flight_session
 from app.telemetry import TelemetryState, run_telemetry_forever
 
 from app.logger import setup_logger
-import logging, sys
+import logging
 
 # logger setup
 log = setup_logger(name="ground-station-core", level=logging.WARNING)

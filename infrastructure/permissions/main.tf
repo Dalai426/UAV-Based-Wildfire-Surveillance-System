@@ -236,3 +236,33 @@ resource "aws_iot_policy" "iot_credential_policy" {
 data "aws_iot_endpoint" "credential_provider" {
   endpoint_type = "iot:CredentialProvider"
 }
+
+# user for ground station cwAgent to write data validation failure logs to CloudWatch
+resource "aws_iam_user" "ground_station_cloudwatch" {
+  name = "${var.project_name}-ground-station-cloudwatch"
+}
+
+# policy to allow ground station to create log group, inspect existing logs, creating logs, write data validation failure logs, and set expiration to CloudWatch
+resource "aws_iam_policy" "ground_station_cloudwatch" {
+  name = "${var.project_name}-ground-station-cloudwatch"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams",
+        "logs:PutRetentionPolicy"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_user_policy_attachment" "ground_station_cloudwatch" {
+  user       = aws_iam_user.ground_station_cloudwatch.name
+  policy_arn = aws_iam_policy.ground_station_cloudwatch.arn
+}
