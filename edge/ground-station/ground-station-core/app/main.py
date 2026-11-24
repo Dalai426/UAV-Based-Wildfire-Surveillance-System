@@ -3,12 +3,13 @@ import os
 import uuid
 from datetime import datetime, timezone
 import httpx
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from pydantic import ValidationError
 import base64
 import binascii
 from cryptography import x509
 from datetime import timedelta, timezone
+import ipaddress
 
 from app.db import (
     insert_event,
@@ -472,6 +473,55 @@ async def missionComplete(request: RevokeRequest):
         raise HTTPException(
             status_code=401,
             detail="Session key confirmation failed",
+        ) from exc
+
+
+TRUSTED_NETS = [
+    ipaddress.ip_network(n.strip())
+    for n in "172.20.0.10,172.20.0.11,172.20.0.12,172.20.0.13".split(",")
+    if n.strip()
+]
+
+
+def is_trusted_ip(client_ip: str) -> bool:
+    try:
+        address = ipaddress.ip_address(client_ip)
+        return any(address in network for network in TRUSTED_NETS)
+    except ValueError:
+        return False
+
+
+@app.post("/auth/mediamtx")
+async def mediamtx_auth(request: Request):
+    try:
+        data = await request.json()
+        client_ip = data.get("ip", "")
+        print(data)
+        if client_ip and is_trusted_ip(client_ip):
+            print(f"Trusted service {client_ip}")
+            return {"message": f"Trusted service {client_ip}"}
+        drone_id = data.get("user")
+        session_key = data.get("password")
+        if not drone_id or not session_key:
+            print(data)
+            raise ValueError("Missing drone credentials")
+        resp = authorize_session(
+            drone_id,
+            session=base64.b64decode(
+                session_key,
+                validate=True,
+            ),
+        )
+        return {"message": "Authentication successful"}
+    except ValueError as exc:
+        print(exc)
+        raise HTTPException(
+            status_code=401, detail="Invalid drone credentials"
+        ) from exc
+    except Exception as exc:
+        print(exc)
+        raise HTTPException(
+            status_code=500, detail="Authentication service error"
         ) from exc
 
 
