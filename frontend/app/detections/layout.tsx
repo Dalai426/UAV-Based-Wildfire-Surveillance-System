@@ -1,10 +1,13 @@
+import type { ReactNode } from "react"
 import { AuthGuard } from "@/components/auth-guard"
+
+export const instant = false
 
 export default function DetectionsLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: {
+  children: ReactNode
+}) {
   return (
     <AuthGuard>
       {children}

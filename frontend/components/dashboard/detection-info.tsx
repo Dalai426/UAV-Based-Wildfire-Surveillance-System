@@ -29,6 +29,7 @@ type DetectionInfoProps = {
   latitude: number
   longitude: number
   initialStatus: "Open" | "Verified" | "Closed"
+  onStatusChange: (status: "Open" | "Verified" | "Closed") => void
 }
 
 export function DetectionInfo({
@@ -38,10 +39,26 @@ export function DetectionInfo({
   latitude,
   longitude,
   initialStatus,
+  onStatusChange,
 }: DetectionInfoProps) {
   const [status, setStatus] = useState(initialStatus)
   const [isClosing, setIsClosing] = useState(false)
   const [closeError, setCloseError] = useState("")
+
+  const mapOffset = 0.015
+  const boundingBox = [
+    longitude - mapOffset,
+    latitude - mapOffset,
+    longitude + mapOffset,
+    latitude + mapOffset,
+  ].join(",")
+
+const mapUrl =
+  `https://www.openstreetmap.org/export/embed.html` +
+  `?bbox=${boundingBox}` +
+  `&layer=mapnik` +
+  `&marker=${latitude},${longitude}`
+
   async function handleCloseIncident() {
     setIsClosing(true)
     setCloseError("")
@@ -50,6 +67,7 @@ export function DetectionInfo({
       await new Promise((resolve) => setTimeout(resolve, 700))
 
       setStatus("Closed")
+      onStatusChange("Closed")
     } catch (error) {
       console.error("Error closing incident:", error)
 
@@ -152,17 +170,20 @@ export function DetectionInfo({
             </div>
           </CardContent>
         </Card>
-
-        {status === "Verified" && (
+        
+        {(status === "Open" || status === "Verified") && (
+          //TODO: For now, button will apear for both. Change for only verified later.
           <div className="mt-8 flex flex-col items-center">
             <AlertDialog>
-              <AlertDialogTrigger>
-                <Button
-                  disabled={isClosing}
-                  className="h-12 min-w-52 rounded-xl bg-[#FF6B0B] px-12 text-base text-white hover:bg-[#E85F00]"
-                >
-                  {isClosing ? "Closing..." : "Close incident"}
-                </Button>
+              <AlertDialogTrigger
+                disabled={isClosing}
+                render={
+                  <Button
+                    className="h-12 min-w-52 rounded-xl bg-[#FF6B0B] px-12 text-base text-white hover:bg-[#E85F00]"
+                  />
+                }
+              >
+                {isClosing ? "Closing..." : "Close incident"}
               </AlertDialogTrigger>
 
               <AlertDialogContent>
@@ -207,6 +228,24 @@ export function DetectionInfo({
         )}
 
       </div>
+
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-base">
+            Detection location
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          <iframe
+            title="Wildfire detection location"
+            src={mapUrl}
+            className="h-[400px] w-full rounded-xl border border-slate-200"
+            loading="lazy"
+          />
+        </CardContent>
+      </Card>
+
     </div>
   )
 }

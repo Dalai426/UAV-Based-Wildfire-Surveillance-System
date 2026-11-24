@@ -1,8 +1,12 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link"
+
 import { buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { detections } from "@/lib/mock-data"
 import { DashboardHeader } from "@/components/dashboard/header"
+
 import {
   Card,
   CardContent,
@@ -10,9 +14,54 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-export const instant = false
+import { getApiToken } from "@/lib/auth-token"
+import {
+  listDetections,
+  type DetectionWithClosure,
+} from "@/lib/api"
 
 export default function Home() {
+  const [detections, setDetections] =
+    useState<DetectionWithClosure[]>([])
+
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadDetections() {
+      try {
+        const token = await getApiToken()
+        const data = await listDetections(token)
+
+        if (!cancelled) {
+          setDetections(
+            data.filter(
+              (detection) => detection.status !== "Closed"
+            )
+          )
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setError(
+            "Unable to load detections. Please try again."
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadDetections()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <main className="min-h-screen bg-slate-50">
       <DashboardHeader />
@@ -28,109 +77,108 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="mb-8 rounded-xl border border-orange-200 bg-orange-50 p-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-1 h-2.5 w-2.5 rounded-full bg-red-500" />
+        {/* TODO: Implement real new detection notifications. */}
 
-            <div>
-              <p className="font-medium text-slate-900">
-                New detection received
-              </p>
-
-              <p className="mt-1 text-sm text-slate-600">
-                Detection INC-204 has been registered and is now available for review.
-              </p>
-            </div>
+        {loading ? (
+          <p className="text-sm text-slate-500">
+            Loading detections...
+          </p>
+        ) : error ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+            <p className="text-sm text-red-700">
+              {error}
+            </p>
           </div>
-        </div>
+        ) : detections.length === 0 ? (
+          <div className="rounded-xl border bg-white p-10 text-center">
+            <h3 className="text-lg font-semibold text-slate-900">
+              No active detections
+            </h3>
 
-{detections.length === 0 ? (
-  <div className="rounded-xl border bg-white p-10 text-center">
-    <h3 className="text-lg font-semibold text-slate-900">
-      No active detections
-    </h3>
-
-    <p className="mt-2 text-sm text-slate-500">
-      New wildfire detections will appear here automatically.
-    </p>
-  </div>
-) : (
-  <div className="space-y-4">
-    {detections.map((detection) => (
-      <Card key={detection.id}>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">
-              {detection.id}
-            </CardTitle>
-
-            {detection.status === "Open" ? (
-              <Badge variant="destructive">
-                Open
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className="border-green-200 bg-green-50 text-green-700"
-              >
-                Verified
-              </Badge>
-            )}
+            <p className="mt-2 text-sm text-slate-500">
+              Refresh the page to check for new detections.
+            </p>
           </div>
-        </CardHeader>
+        ) : (
+          <div className="space-y-4">
+            {detections.map((detection) => (
+              <Card key={detection.id}>
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-4">
+                    <CardTitle className="break-all text-lg">
+                      {detection.id}
+                    </CardTitle>
 
-        <CardContent>
-          <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-end">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <p className="text-sm text-slate-500">
-                  Time
-                </p>
+                    {detection.status === "Open" ? (
+                      <Badge variant="destructive">
+                        Open
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="border-green-200 bg-green-50 text-green-700"
+                      >
+                        Verified
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
 
-                <p className="mt-1 font-medium text-slate-900">
-                  {new Date(detection.timestamp).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
+                <CardContent>
+                  <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-end">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <p className="text-sm text-slate-500">
+                          Time
+                        </p>
 
-              <div>
-                <p className="text-sm text-slate-500">
-                  Confidence
-                </p>
+                        <p className="mt-1 font-medium text-slate-900">
+                          {new Date(
+                            detection.timestamp
+                          ).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
 
-                <p className="mt-1 font-medium text-slate-900">
-                  {detection.confidence}%
-                </p>
-              </div>
+                      <div>
+                        <p className="text-sm text-slate-500">
+                          Confidence
+                        </p>
 
-              <div>
-                <p className="text-sm text-slate-500">
-                  Coordinates
-                </p>
+                        <p className="mt-1 font-medium text-slate-900">
+                          {detection.confidence}%
+                        </p>
+                      </div>
 
-                <p className="mt-1 font-medium text-slate-900">
-                  {detection.latitude}, {detection.longitude}
-                </p>
-              </div>
-            </div>
-            <Link
-              href={`/detections/${detection.id}`}
-                className={buttonVariants()}
-                style={{
-                  backgroundColor: "#FF6B0B",
-                  color: "white",
-                }}
-            >
-              Open details
-            </Link>
+                      <div>
+                        <p className="text-sm text-slate-500">
+                          Coordinates
+                        </p>
+
+                        <p className="mt-1 font-medium text-slate-900">
+                          {detection.latitude}, {detection.longitude}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Link
+                      href={`/detections/${encodeURIComponent(detection.id)}`}
+                      className={buttonVariants()}
+                      style={{
+                        backgroundColor: "#FF6B0B",
+                        color: "white",
+                      }}
+                    >
+                      Open details
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </CardContent>
-      </Card>
-    ))}
-  </div>
-)}
+        )}
       </div>
     </main>
   )
