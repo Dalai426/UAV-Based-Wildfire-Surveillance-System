@@ -67,7 +67,8 @@ COPY --from=build /home/ardupilot/ardupilot/Tools/autotest /ardupilot/Tools/auto
 COPY start_sitl.sh /usr/local/bin/start_sitl.sh
 
 # The flight path and the script that flies it on every start. COPY creates /missions
-COPY flight.plan /missions/flight.plan
+COPY --chown=root:drone --chmod=0640 flight.plan /missions/flight.plan
+RUN chown root:drone /missions && chmod 0750 /missions
 COPY fly_mission.py /usr/local/bin/fly_mission.py
 
 # Mavic Air battery drain. It goes in the working folder: the simulator only loads relative paths
