@@ -47,15 +47,11 @@ from app.auth.authorize import authorize_session
 from app.auth.db import initialise_sentinel_database, revoke_flight_session
 from app.telemetry import TelemetryState, run_telemetry_forever
 
-from app.logger import LogFormatter
+from app.logger import setup_logger
 import logging, sys
 
 # logger setup
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(LogFormatter())
-log = logging.getLogger("app")
-log.addHandler(handler)
-log.setLevel(logging.WARNING)
+log = setup_logger(name="ground-station-core", level=logging.WARNING)
 
 # Main Ground Station Core HTTP API.
 

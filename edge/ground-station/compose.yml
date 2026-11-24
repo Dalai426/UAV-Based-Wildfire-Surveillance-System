@@ -71,6 +71,7 @@ services:
     environment:
       # Temporary MVP configuration
       # Later these should come from drone/session registration instead
+      SERVICE_NAME: ground-station-core
       DRONE_ID: ${DRONE_ID}
       STREAM_KEY: ${STREAM_KEY}
 
@@ -98,6 +99,9 @@ services:
 
       # Read authentication files from the host.
       - ${CLOUD_CERTS_DIR:?Set CLOUD_CERTS_DIR in .env with an absolute path to the local certificate directory}:/certs:ro
+
+      # GroundStationCore logs
+      - ./data/logs:/data/logs
     ports:
       # Ground Station Core API
       - "8080:8080"
