@@ -13,8 +13,15 @@ rtspTransports: [tcp]
 playback: true
 playbackAddress: :9996
 
-pathDefaults:
+# Authenticate access to mediaMTX using custom auth
+# authMethod: http
+# authHTTPAddress: http://ground-station-core:8080/auth/mediamtx
+# authHTTPExclude:
+#   - action: api
+#   - action: metrics
+#   - action: pprof
 
+pathDefaults:
   # Record every incoming stream automatically
   record: true
 
