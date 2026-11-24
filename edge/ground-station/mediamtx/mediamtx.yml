@@ -1,6 +1,13 @@
 # Log enough information for development/debugging
 logLevel: info
 
+# Disable unused streaming protocols.
+rtmp: false
+hls: false
+webrtc: false
+srt: false
+moq: false
+
 # Enable RTSP
 rtsp: true
 
