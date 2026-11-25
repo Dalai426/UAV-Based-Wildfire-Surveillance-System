@@ -7,6 +7,8 @@ services:
   media-server:
     image: bluenviron/mediamtx:1
     restart: unless-stopped
+    user: "10004:10004"
+
     networks:
       surveillance_net:
         ipv4_address: 172.20.0.10
@@ -103,9 +105,6 @@ services:
       # Read authentication files from the host.
       - ${CLOUD_CERTS_DIR:?Set CLOUD_CERTS_DIR in .env with an absolute path to the local certificate directory}:/certs:ro
     ports:
-      # Ground Station Core API
-      - "8080:8080"
-
       # Drone telemetry (MAVLink)
       #
       # UDP, not TCP: "/udp" is required, Docker maps TCP otherwise
